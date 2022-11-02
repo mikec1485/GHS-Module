@@ -1,2 +1,3 @@
 # GHS-Module
-A PixInsight process module implementing the Generalised Hyperbolic stretch equations is currently in development.  Source code will be available here in due course.
+The source code in this repository implements the Generalised Hyperbolic stretch equations as a process module for PixInsight.
+This product is based on software from the PixInsight project, developed by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
