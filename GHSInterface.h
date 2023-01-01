@@ -11,7 +11,7 @@
 // GHSInterface.h
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -287,7 +287,7 @@ private:
     enum slider_id          { C0Slider, MSlider, C1Slider, NoSlider = -1 };
     enum cursor_status      { NoCursor, InputCursor, OutputCursor };
     enum readout_source     { FromPreview, FromHistogram, FromNone };
-    enum fa_parameter       { SP, LP, HP, BP, LCP, WP, HCP };
+    enum fa_parameter       { D, b, SP, LP, HP, BP, LCP, WP, HCP };
 
     typedef Histogram::count_type       count_type;
     typedef Histogram::histogram_type   histogram_type;
@@ -491,8 +491,6 @@ private:
     void __ShowGrid_ButtonClick( Button&, bool );
     void __LogHistogram_ButtonClick( Button&, bool );
     void __PreStretchHist_ButtonClick( Button&, bool );
-    //void __Web_ButtonClick( Button&, bool );
-    //void __Web_Close( Control&, bool& );
     void __UpdateRealTimePreview_Timer( Timer& );
 
     friend struct GUIData;

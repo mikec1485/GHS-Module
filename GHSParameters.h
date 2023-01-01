@@ -11,7 +11,7 @@
 // GHSParameters.h
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -254,7 +254,7 @@ public:
           CT_RGBBlend,
           CT_RescaleGlobal,
           CT_NumberOfItems,
-          Default = CT_Clip };
+          Default = CT_RGBBlend };
 
     GHSCT( MetaProcess* );
 

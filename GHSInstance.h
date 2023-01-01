@@ -11,7 +11,7 @@
 // GHSInstance.h
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -69,145 +69,145 @@ private:
     
     void Transform( double& value ) const
     {
-        if (!IsIdentityTransformation())   // no need to update value if identity stretch
-        {            
-         if (m_flags.Linear)   // Linear stretch
-         {
-             value = (value <= p_BP) ? 0.0 : ((value >= p_WP ) ? 1.0 : (value - p_BP)/(p_WP - p_BP));
-             
-             // A linear stretch is not truly invertible so we never allow this
-             //if (m_flags.Inverse)
-             //     value = value * (p_WP - p_BP) + p_BP;
-             //else
-             //     value = (value <= p_BP) ? 0.0 : ((value >= p_WP ) ? 1.0 : (value - p_BP)/(p_WP - p_BP));
-         }
-         else   // Non-linear stretch
-         {
-             if ((p_SP < p_LP) || (p_SP > p_HP))
-                 return;
-             
-             if (m_flags.GHSLog)
-             {
-                 double LPT = p_LP;
-                 double SPT = p_SP;
-                 double HPT = p_HP;
-
-                 if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
-                 else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 + m_coeffs.d2 * value);}
-                 else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * Ln(m_coeffs.c3 + m_coeffs.d3 * value);}
-                 else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
-             }
-             
-             if (m_flags.GHSLogInv)
-             {
-                 double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
-                 double SPT = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 + m_coeffs.d2 * p_SP);
-                 double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
-
-                 if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
-                 else if  (value < SPT)  {value = (Exp((value - m_coeffs.a2) / m_coeffs.b2) - m_coeffs.c2) / m_coeffs.d2;}
-                 else if  (value < HPT)  {value = (Exp((value - m_coeffs.a3) / m_coeffs.b3) - m_coeffs.c3) / m_coeffs.d3;}
-                 else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
-             }
-             
-             if (m_flags.GHSExp)
-             {
-                 double LPT = p_LP;
-                 double SPT = p_SP;
-                 double HPT = p_HP;
-
-                 if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
-                 else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * exp(m_coeffs.c2 + m_coeffs.d2 * value);}
-                 else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * exp(m_coeffs.c3 + m_coeffs.d3 * value);}
-                 else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
-             }
-             
-             if (m_flags.GHSExpInv)
-             {
-                 double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
-                 double SPT = m_coeffs.a2 + m_coeffs.b2 * Exp(m_coeffs.c2 + m_coeffs.d2 * p_SP);
-                 double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
-
-                 if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
-                 else if  (value < SPT)  {value = (Ln((value - m_coeffs.a2) / m_coeffs.b2) - m_coeffs.c2) / m_coeffs.d2;}
-                 else if  (value < HPT)  {value = (Ln((value - m_coeffs.a3) / m_coeffs.b3) - m_coeffs.c3) / m_coeffs.d3;}
-                 else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
-             }
-             
-             if (m_flags.GHSHyp || m_flags.GHSInt)
-             {
-                 double LPT = p_LP;
-                 double SPT = p_SP;
-                 double HPT = p_HP;
-
-                 if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
-                 else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * Pow((m_coeffs.c2 + m_coeffs.d2 * value), m_coeffs.e2);}
-                 else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * Pow((m_coeffs.c3 + m_coeffs.d3 * value), m_coeffs.e3);}
-                 else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
-             }
-             
-             if (m_flags.GHSHypInv || m_flags.GHSIntInv)
-             {
-                 double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
-                 double SPT = m_coeffs.a2 + m_coeffs.b2 * Pow((m_coeffs.c2 + m_coeffs.d2 * p_SP), m_coeffs.e2);
-                 double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
-
-                 if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
-                 else if  (value < SPT)  {value = (Pow((value - m_coeffs.a2)/m_coeffs.b2, 1/m_coeffs.e2) - m_coeffs.c2) / m_coeffs.d2;}
-                 else if  (value < HPT)  {value = (Pow((value - m_coeffs.a3)/m_coeffs.b3, 1/m_coeffs.e3) - m_coeffs.c3) / m_coeffs.d3;}
-                 else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
-             }
+            if (!IsIdentityTransformation())   // no need to update value if identity stretch
+            {
+                if (m_flags.Linear)   // Linear stretch
+                {
+                    //value = (value <= p_BP) ? 0.0 : ((value >= p_WP ) ? 1.0 : (value - p_BP)/(p_WP - p_BP));
                     
-             if (m_flags.GHSMtf)
-             {
-                 double LPT = p_LP;
-                 double SPT = p_SP;
-                 double HPT = p_HP;
-
-                 if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
-                 else if  (value < SPT)  {value = m_coeffs.a2 + (m_coeffs.b2 * value + m_coeffs.c2)/(m_coeffs.d2 * value + m_coeffs.e2);}
-                 else if  (value < HPT)  {value = m_coeffs.a3 + (m_coeffs.b3 * value + m_coeffs.c3)/(m_coeffs.d3 * value + m_coeffs.e3);}
-                 else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
-             }
-             
-             if (m_flags.GHSMtfInv)
-             {
-                 double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
-                 double SPT = m_coeffs.a2 + (m_coeffs.b2 * p_SP + m_coeffs.c2) / (m_coeffs.d2 * p_SP + m_coeffs.e2);
-                 double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
-                 
-                 if       (value < LPT)   {value = (value - m_coeffs.a1) / m_coeffs.b1;}
-                 else if  (value < SPT)   {value = (m_coeffs.c2 - m_coeffs.e2 * (value - m_coeffs.a2))/(m_coeffs.d2 * (value - m_coeffs.a2) - m_coeffs.b2);}
-                 else if  (value < HPT)   {value = (m_coeffs.c3 - m_coeffs.e3 * (value - m_coeffs.a3))/(m_coeffs.d3 * (value - m_coeffs.a3) - m_coeffs.b3);}
-                 else                 {value = (value - m_coeffs.a4) / m_coeffs.b4;}
-             }
-             
-             if (m_flags.GHSAsh)
-             {
-                 double LPT = p_LP;
-                 double SPT = p_SP;
-                 double HPT = p_HP;
-
-                 if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
-                 else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 * (value - m_coeffs.e2) + Sqrt(m_coeffs.d2 * (value - m_coeffs.e2) * (value - m_coeffs.e2) + 1));}
-                 else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * Ln(m_coeffs.c3 * (value - m_coeffs.e3) + Sqrt(m_coeffs.d3 * (value - m_coeffs.e3) * (value - m_coeffs.e3) + 1));}
-                 else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
-             }
-             
-             if (m_flags.GHSAshInv)
-             {
-                 double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
-                 double SPT = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 * (p_SP - m_coeffs.e2) + Sqrt(m_coeffs.d2 * (p_SP - m_coeffs.e2) * (p_SP - m_coeffs.e2) + 1));
-                 double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
-
-                 if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
-                 else if  (value < SPT)  {double expVal = Exp((m_coeffs.a2 - value) / m_coeffs.b2); value = m_coeffs.e2 - (expVal - (1 / expVal)) / (2 * m_coeffs.c2);}
-                 else if  (value < HPT)  {double expVal = Exp((m_coeffs.a3 - value) / m_coeffs.b3); value = m_coeffs.e3 - (expVal - (1 / expVal)) / (2 * m_coeffs.c3);}
-                 else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
-             }
-         }
-        }
-        value = Range(value, 0.0, 1.0);
+                    // A linear stretch is not truly invertible so we never allow this
+                    if (m_flags.Inverse)
+                         value = Range(value * (p_WP - p_BP) + p_BP, 0.0, 1.0);
+                    else
+                         value = (value <= p_BP) ? 0.0 : ((value >= p_WP ) ? 1.0 : (value - p_BP)/(p_WP - p_BP));
+                }
+                else   // Non-linear stretch
+                {
+                    if ((p_SP < p_LP) || (p_SP > p_HP))
+                        return;
+                    
+                    if (m_flags.GHSLog)
+                    {
+                        double LPT = p_LP;
+                        double SPT = p_SP;
+                        double HPT = p_HP;
+                        
+                        if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
+                        else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 + m_coeffs.d2 * value);}
+                        else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * Ln(m_coeffs.c3 + m_coeffs.d3 * value);}
+                        else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
+                    }
+                    
+                    if (m_flags.GHSLogInv)
+                    {
+                        double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
+                        double SPT = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 + m_coeffs.d2 * p_SP);
+                        double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
+                        
+                        if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
+                        else if  (value < SPT)  {value = (Exp((value - m_coeffs.a2) / m_coeffs.b2) - m_coeffs.c2) / m_coeffs.d2;}
+                        else if  (value < HPT)  {value = (Exp((value - m_coeffs.a3) / m_coeffs.b3) - m_coeffs.c3) / m_coeffs.d3;}
+                        else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
+                    }
+                    
+                    if (m_flags.GHSExp)
+                    {
+                        double LPT = p_LP;
+                        double SPT = p_SP;
+                        double HPT = p_HP;
+                        
+                        if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
+                        else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * exp(m_coeffs.c2 + m_coeffs.d2 * value);}
+                        else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * exp(m_coeffs.c3 + m_coeffs.d3 * value);}
+                        else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
+                    }
+                    
+                    if (m_flags.GHSExpInv)
+                    {
+                        double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
+                        double SPT = m_coeffs.a2 + m_coeffs.b2 * Exp(m_coeffs.c2 + m_coeffs.d2 * p_SP);
+                        double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
+                        
+                        if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
+                        else if  (value < SPT)  {value = (Ln((value - m_coeffs.a2) / m_coeffs.b2) - m_coeffs.c2) / m_coeffs.d2;}
+                        else if  (value < HPT)  {value = (Ln((value - m_coeffs.a3) / m_coeffs.b3) - m_coeffs.c3) / m_coeffs.d3;}
+                        else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
+                    }
+                    
+                    if (m_flags.GHSHyp || m_flags.GHSInt)
+                    {
+                        double LPT = p_LP;
+                        double SPT = p_SP;
+                        double HPT = p_HP;
+                        
+                        if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
+                        else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * Pow((m_coeffs.c2 + m_coeffs.d2 * value), m_coeffs.e2);}
+                        else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * Pow((m_coeffs.c3 + m_coeffs.d3 * value), m_coeffs.e3);}
+                        else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
+                    }
+                    
+                    if (m_flags.GHSHypInv || m_flags.GHSIntInv)
+                    {
+                        double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
+                        double SPT = m_coeffs.a2 + m_coeffs.b2 * Pow((m_coeffs.c2 + m_coeffs.d2 * p_SP), m_coeffs.e2);
+                        double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
+                        
+                        if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
+                        else if  (value < SPT)  {value = (Pow((value - m_coeffs.a2)/m_coeffs.b2, 1/m_coeffs.e2) - m_coeffs.c2) / m_coeffs.d2;}
+                        else if  (value < HPT)  {value = (Pow((value - m_coeffs.a3)/m_coeffs.b3, 1/m_coeffs.e3) - m_coeffs.c3) / m_coeffs.d3;}
+                        else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
+                    }
+                    
+                    if (m_flags.GHSMtf)
+                    {
+                        double LPT = p_LP;
+                        double SPT = p_SP;
+                        double HPT = p_HP;
+                        
+                        if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
+                        else if  (value < SPT)  {value = m_coeffs.a2 + (m_coeffs.b2 * value + m_coeffs.c2)/(m_coeffs.d2 * value + m_coeffs.e2);}
+                        else if  (value < HPT)  {value = m_coeffs.a3 + (m_coeffs.b3 * value + m_coeffs.c3)/(m_coeffs.d3 * value + m_coeffs.e3);}
+                        else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
+                    }
+                    
+                    if (m_flags.GHSMtfInv)
+                    {
+                        double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
+                        double SPT = m_coeffs.a2 + (m_coeffs.b2 * p_SP + m_coeffs.c2) / (m_coeffs.d2 * p_SP + m_coeffs.e2);
+                        double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
+                        
+                        if       (value < LPT)   {value = (value - m_coeffs.a1) / m_coeffs.b1;}
+                        else if  (value < SPT)   {value = (m_coeffs.c2 - m_coeffs.e2 * (value - m_coeffs.a2))/(m_coeffs.d2 * (value - m_coeffs.a2) - m_coeffs.b2);}
+                        else if  (value < HPT)   {value = (m_coeffs.c3 - m_coeffs.e3 * (value - m_coeffs.a3))/(m_coeffs.d3 * (value - m_coeffs.a3) - m_coeffs.b3);}
+                        else                 {value = (value - m_coeffs.a4) / m_coeffs.b4;}
+                    }
+                    
+                    if (m_flags.GHSAsh)
+                    {
+                        double LPT = p_LP;
+                        double SPT = p_SP;
+                        double HPT = p_HP;
+                        
+                        if       (value < LPT)  {value = m_coeffs.a1 + m_coeffs.b1 * value;}
+                        else if  (value < SPT)  {value = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 * (value - m_coeffs.e2) + Sqrt(m_coeffs.d2 * (value - m_coeffs.e2) * (value - m_coeffs.e2) + 1));}
+                        else if  (value < HPT)  {value = m_coeffs.a3 + m_coeffs.b3 * Ln(m_coeffs.c3 * (value - m_coeffs.e3) + Sqrt(m_coeffs.d3 * (value - m_coeffs.e3) * (value - m_coeffs.e3) + 1));}
+                        else                    {value = m_coeffs.a4 + m_coeffs.b4 * value;}
+                    }
+                    
+                    if (m_flags.GHSAshInv)
+                    {
+                        double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
+                        double SPT = m_coeffs.a2 + m_coeffs.b2 * Ln(m_coeffs.c2 * (p_SP - m_coeffs.e2) + Sqrt(m_coeffs.d2 * (p_SP - m_coeffs.e2) * (p_SP - m_coeffs.e2) + 1));
+                        double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
+                        
+                        if       (value < LPT)  {value = (value - m_coeffs.a1) / m_coeffs.b1;}
+                        else if  (value < SPT)  {double expVal = Exp((m_coeffs.a2 - value) / m_coeffs.b2); value = m_coeffs.e2 - (expVal - (1 / expVal)) / (2 * m_coeffs.c2);}
+                        else if  (value < HPT)  {double expVal = Exp((m_coeffs.a3 - value) / m_coeffs.b3); value = m_coeffs.e3 - (expVal - (1 / expVal)) / (2 * m_coeffs.c3);}
+                        else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
+                    }
+                }
+            }
+            value = Range(value, 0.0, 1.0);
     }
     
     //-------------------------------------------------------
@@ -248,7 +248,8 @@ private:
        Flags( GHSInstance& G )
        {
            Linear = (G.p_ST == GHSST::ST_Linear);
-           Inverse = G.IsInvertible() && G.p_Inv;
+           //Inverse = G.IsInvertible() && G.p_Inv;
+           Inverse = G.p_Inv;
            
            GHSType = (G.p_ST == GHSST::ST_GeneralisedHyperbolic) && (!Inverse);
            GHSLog = (GHSType) && (G.p_b == -1);
@@ -314,243 +315,243 @@ private:
          */
         Coeffs( GHSInstance& G )
         {
-            double orgD = G.p_D;
-            double D = Exp(orgD) - 1.0;
-            double B = G.p_b;
-            double SP = G.p_SP;
-            double LP = Min(SP, G.p_LP);
-            double HP = Max(SP, G.p_HP);
-            
-            //---------------------------
-            // GHS Logarithmic - (b = -1)|
-            //---------------------------
-            if ( G.m_flags.GHSLog ||  G.m_flags.GHSLogInv )
-            {
-                double qlp = -1.0 * Ln(1.0 + D * (SP - LP));
-                double q0 = qlp - D * LP / (1.0 + D * (SP - LP));
-                double qwp = Ln(1.0 + D * (HP - SP));
-                double q1 = qwp + D * (1.0 - HP) / (1.0 + D * (HP - SP));
-                double q = 1.0 / (q1 - q0);
-
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = D / (1.0 + D * (SP - LP)) * q;
-
-                // derive coefficients for x < SP
-                a2 = (-q0) * q;
-                b2 = -q ;
-                c2 = 1.0 + D * SP;
-                d2 = -D;
-                e2 = 0.0;
-
-                // derive coefficients for SP <= x <= HP
-                a3 = (-q0) * q;
-                b3 = q;
-                c3 = 1.0 - D * SP;
-                d3 = D;
-                e3 = 0.0;
-
-                // derive coefficients for x > HP
-                a4 = (qwp - q0 - D * HP / (1.0 + D * (HP - SP))) * q;
-                b4 = q * D / (1.0 + D * (HP - SP));
-            }
-
-            //-----------------------
-            // GHS Integral - (b < 0)|
-            //-----------------------
-            if ( G.m_flags.GHSInt ||  G.m_flags.GHSIntInv )
-            {
-                double qlp = -(1.0 - Pow((1.0 - D * B * (SP - LP)), (B + 1.0) / B)) / (B + 1);
-                double q0 = qlp - D * LP * (Pow((1.0 - D * B * (SP - LP)), 1.0 / B));
-                double qwp = -(Pow((1.0 - D * B * (HP - SP)), (B + 1.0) / B) - 1.0) / (B + 1);
-                double q1 = qwp + D * (1.0 - HP) * (Pow((1.0 - D * B * (HP - SP)), 1.0 / B));
-                double q = 1.0 / (q1 - q0);
-
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = D * Pow(1.0 - D * B * (SP - LP), 1.0 / B) * q;
-
-                // derive coefficients for LP <= x < SP
-                a2 = -(1 / (B + 1) + q0) * q;
-                b2 = q / ( B + 1);
-                c2 = 1.0 - D * B * SP;
-                d2 = D * B;
-                e2 = (B + 1.0) / B;
-
-                // derive coefficients for SP <= x <= HP
-                a3 = (1 / (B + 1) - q0) * q;
-                b3 = -q / (B + 1);
-                c3 = 1.0 + D * B * SP;
-                d3 = -D * B;
-                e3 = (B + 1.0) / B;
-
-                // derive coefficients for x > HP
-                a4 = (qwp - q0 - D * HP * Pow((1.0 - D * B * (HP - SP)), 1.0 / B)) * q;
-                b4 = D * Pow((1.0 - D * B * (HP - SP)), 1.0 / B) * q;
-            }
-
-            //--------------------------
-            // GHS Exponential - (b = 0)|
-            //--------------------------
-            if ( G.m_flags.GHSExp ||  G.m_flags.GHSExpInv )
-            {
-                double qlp = Exp(-D * (SP - LP));
-                double q0 = qlp - D * LP * qlp;
-                double qwp = 2.0 - Exp(-D * (HP - SP));
-                double q1 = qwp + D * (1.0 - HP) * (2.0 - qwp);
-                double q = 1.0 / (q1 - q0);
-
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = D * qlp * q;
-
-                // derive coefficients for LP <= x < SP
-                a2 = -q0 * q;
-                b2 = q;
-                c2 = -D * SP;
-                d2 = D;
-                e2 = 0.0;
-
-                // derive coefficients for SP <= x <= HP
-                a3 = (2.0 - q0) * q;
-                b3 = -q;
-                c3 = D * SP;
-                d3 = -D;
-                e3 = 0.0;
-
-                // derive coefficients for x > HP
-                a4 = (qwp - q0 - D * HP * (2.0 - qwp)) * q;
-                b4 = D * (2.0 - qwp) * q;
-            }
-
-            //----------------------------------
-            // GHS Hyperbolic/Harmonic - (b > 0)|
-            //----------------------------------
-            if ( G.m_flags.GHSHyp ||  G.m_flags.GHSHypInv )
-            {
-                double qlp = Pow((1 + D * B * (SP - LP)), -1.0 / B);
-                double q0 = qlp - D * LP * Pow((1 + D * B * (SP - LP)), -(1.0 + B) / B);
-                double qwp = 2.0 - Pow(1.0 + D * B * (HP - SP), -1.0 / B);
-                double q1 = qwp + D * (1.0 - HP) * Pow((1.0 + D * B * (HP - SP)), -(1.0 + B) / B);
-                double q = 1.0 / (q1 - q0);
-
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = D * Pow((1 + D * B * (SP - LP)), -(1.0 + B) / B) * q;
-
-                // derive coefficients for LP <= x < SP
-                a2 = -q0 * q;
-                b2 = q;
-                c2 = 1.0 + D * B * SP;
-                d2 = -D * B;
-                e2 = -1.0 / B;
-
-                // derive coefficients for SP <= x <= HP
-                a3 = (2.0 - q0) * q;
-                b3 = -q;
-                c3 = 1.0 - D * B * SP;
-                d3 = D * B;
-                e3 = -1.0 / B;
-
-                // derive coefficients for x > HP
-                a4 = (qwp - q0 - D * HP * Pow((1.0 + D * B * (HP - SP)), -(B + 1.0) / B)) * q;
-                b4 = (D * Pow((1.0 + D * B * (HP - SP)), -(B + 1.0) / B)) * q;
-            }
-            
-            // MTF stretch (Histogram Transformation)
-            if ( G.m_flags.GHSMtf || G.m_flags.GHSMtfInv )
-            {
-                double m = 1 / (2 * (D + 1));
-                double zLPSP = (1 - 2 * m)*(LP - SP) - m;
-                double qlp = (m - 1) * (LP - SP) / zLPSP;
-                double q0 =  qlp + LP * (m - 1) * m / (zLPSP * zLPSP);
-                double qwp = (m - 1) * (HP - SP) / ((2 * m - 1) * (HP - SP) - m);
-                double zSPHP = (2 * m - 1)*(HP - SP) - m;
-                double q1 =  qwp + (HP - 1) * (m - 1) * m / (zSPHP * zSPHP);
-                double q = 1.0 / (q1 - q0);
-
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = m * (1 - m) * q / (zLPSP * zLPSP);
-
-                // derive coefficients for LP <= x <= SP
-                a2 = -q0 * q;
-                b2 = (m-1) * q;
-                c2 = b2 * (-SP);
-                d2 = (1 - 2 * m);
-                e2 = -d2 * SP - m;
-
-                // derive coefficients for LP <= x <= SP
-                a3 = -q0 * q;
-                b3 = (m - 1) * q;
-                c3 = b3 * (-SP);
-                d3 = (2 * m - 1);
-                e3 = -d3 * SP - m;
-
-                // derive coefficients for x > HP
-                a4 = (qwp - HP * (1 - m) * m / (zSPHP * zSPHP) - q0) * q;
-                b4 = -m * (m - 1) * q / (zSPHP * zSPHP);
-            }
-            
-            // Arcsinh Stretch
-            if ( G.m_flags.GHSAsh || G.m_flags.GHSAshInv )
-            {
-                double powSPLP = Sqrt(D * D * (SP - LP) * (SP - LP) + 1);
-                double powHPSP = Sqrt(D * D * (HP - SP) * (HP - SP) + 1);
-                double qlp = - Ln(D * (SP - LP) + powSPLP);
-                double q0 = qlp - LP * D / powSPLP;
-                double qwp = Ln(D * (HP - SP) + powHPSP);
-                double q1 = qwp + (1.0 - HP) * D / powHPSP;
-                double q = 1.0 / (q1 - q0);
-
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = D * q / powSPLP;
-
-                // derive coefficients for LP <= x < SP
-                a2 = -q0 * q;
-                b2 = -q;
-                c2 = -D;
-                d2 = D * D;
-                e2 = SP;
-
-                // derive coefficients for SP <= x <= HP
-                a3 = -q0 * q;
-                b3 = q;
-                c3 = D;
-                d3 = D * D;
-                e3 = SP;
-
-                // derive coefficients for x > HP
-                a4 = (qwp - HP * D / powHPSP - q0) * q;
-                b4 = D * q / powHPSP;
-            }
-            
-            // Linear stretch (coefficients not needed)
-            if ( G.m_flags.Linear )
-            {
-                // derive coefficients for x < LP
-                a1 = 0.0;
-                b1 = 0.0;
-
-                // derive coefficients for LP <= x < SP
-                a2 = 0.0;
-                b2 = 0.0;
-                c2 = 0.0;
-                d2 = 0.0;
-                e2 = SP;
-
-                // derive coefficients for SP <= x <= HP
-                a3 = 0.0;
-                b3 = 0.0;
-                c3 = 0.0;
-                d3 = 0.0;
-                e3 = 0.0;
-
-                // derive coefficients for x > HP
-                a4 = 0.0;
-                b4 = 0.0;
-            }
+                double orgD = G.p_D;
+                double D = Exp(orgD) - 1.0;
+                double B = G.p_b;
+                double SP = G.p_SP;
+                double LP = Min(SP, G.p_LP);
+                double HP = Max(SP, G.p_HP);
+                
+                //---------------------------
+                // GHS Logarithmic - (b = -1)|
+                //---------------------------
+                if ( G.m_flags.GHSLog ||  G.m_flags.GHSLogInv )
+                {
+                    double qlp = -1.0 * Ln(1.0 + D * (SP - LP));
+                    double q0 = qlp - D * LP / (1.0 + D * (SP - LP));
+                    double qwp = Ln(1.0 + D * (HP - SP));
+                    double q1 = qwp + D * (1.0 - HP) / (1.0 + D * (HP - SP));
+                    double q = 1.0 / (q1 - q0);
+                    
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = D / (1.0 + D * (SP - LP)) * q;
+                    
+                    // derive coefficients for x < SP
+                    a2 = (-q0) * q;
+                    b2 = -q ;
+                    c2 = 1.0 + D * SP;
+                    d2 = -D;
+                    e2 = 0.0;
+                    
+                    // derive coefficients for SP <= x <= HP
+                    a3 = (-q0) * q;
+                    b3 = q;
+                    c3 = 1.0 - D * SP;
+                    d3 = D;
+                    e3 = 0.0;
+                    
+                    // derive coefficients for x > HP
+                    a4 = (qwp - q0 - D * HP / (1.0 + D * (HP - SP))) * q;
+                    b4 = q * D / (1.0 + D * (HP - SP));
+                }
+                
+                //-----------------------
+                // GHS Integral - (b < 0)|
+                //-----------------------
+                if ( G.m_flags.GHSInt ||  G.m_flags.GHSIntInv )
+                {
+                    double qlp = -(1.0 - Pow((1.0 - D * B * (SP - LP)), (B + 1.0) / B)) / (B + 1);
+                    double q0 = qlp - D * LP * (Pow((1.0 - D * B * (SP - LP)), 1.0 / B));
+                    double qwp = -(Pow((1.0 - D * B * (HP - SP)), (B + 1.0) / B) - 1.0) / (B + 1);
+                    double q1 = qwp + D * (1.0 - HP) * (Pow((1.0 - D * B * (HP - SP)), 1.0 / B));
+                    double q = 1.0 / (q1 - q0);
+                    
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = D * Pow(1.0 - D * B * (SP - LP), 1.0 / B) * q;
+                    
+                    // derive coefficients for LP <= x < SP
+                    a2 = -(1 / (B + 1) + q0) * q;
+                    b2 = q / ( B + 1);
+                    c2 = 1.0 - D * B * SP;
+                    d2 = D * B;
+                    e2 = (B + 1.0) / B;
+                    
+                    // derive coefficients for SP <= x <= HP
+                    a3 = (1 / (B + 1) - q0) * q;
+                    b3 = -q / (B + 1);
+                    c3 = 1.0 + D * B * SP;
+                    d3 = -D * B;
+                    e3 = (B + 1.0) / B;
+                    
+                    // derive coefficients for x > HP
+                    a4 = (qwp - q0 - D * HP * Pow((1.0 - D * B * (HP - SP)), 1.0 / B)) * q;
+                    b4 = D * Pow((1.0 - D * B * (HP - SP)), 1.0 / B) * q;
+                }
+                
+                //--------------------------
+                // GHS Exponential - (b = 0)|
+                //--------------------------
+                if ( G.m_flags.GHSExp ||  G.m_flags.GHSExpInv )
+                {
+                    double qlp = Exp(-D * (SP - LP));
+                    double q0 = qlp - D * LP * qlp;
+                    double qwp = 2.0 - Exp(-D * (HP - SP));
+                    double q1 = qwp + D * (1.0 - HP) * (2.0 - qwp);
+                    double q = 1.0 / (q1 - q0);
+                    
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = D * qlp * q;
+                    
+                    // derive coefficients for LP <= x < SP
+                    a2 = -q0 * q;
+                    b2 = q;
+                    c2 = -D * SP;
+                    d2 = D;
+                    e2 = 0.0;
+                    
+                    // derive coefficients for SP <= x <= HP
+                    a3 = (2.0 - q0) * q;
+                    b3 = -q;
+                    c3 = D * SP;
+                    d3 = -D;
+                    e3 = 0.0;
+                    
+                    // derive coefficients for x > HP
+                    a4 = (qwp - q0 - D * HP * (2.0 - qwp)) * q;
+                    b4 = D * (2.0 - qwp) * q;
+                }
+                
+                //----------------------------------
+                // GHS Hyperbolic/Harmonic - (b > 0)|
+                //----------------------------------
+                if ( G.m_flags.GHSHyp ||  G.m_flags.GHSHypInv )
+                {
+                    double qlp = Pow((1 + D * B * (SP - LP)), -1.0 / B);
+                    double q0 = qlp - D * LP * Pow((1 + D * B * (SP - LP)), -(1.0 + B) / B);
+                    double qwp = 2.0 - Pow(1.0 + D * B * (HP - SP), -1.0 / B);
+                    double q1 = qwp + D * (1.0 - HP) * Pow((1.0 + D * B * (HP - SP)), -(1.0 + B) / B);
+                    double q = 1.0 / (q1 - q0);
+                    
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = D * Pow((1 + D * B * (SP - LP)), -(1.0 + B) / B) * q;
+                    
+                    // derive coefficients for LP <= x < SP
+                    a2 = -q0 * q;
+                    b2 = q;
+                    c2 = 1.0 + D * B * SP;
+                    d2 = -D * B;
+                    e2 = -1.0 / B;
+                    
+                    // derive coefficients for SP <= x <= HP
+                    a3 = (2.0 - q0) * q;
+                    b3 = -q;
+                    c3 = 1.0 - D * B * SP;
+                    d3 = D * B;
+                    e3 = -1.0 / B;
+                    
+                    // derive coefficients for x > HP
+                    a4 = (qwp - q0 - D * HP * Pow((1.0 + D * B * (HP - SP)), -(B + 1.0) / B)) * q;
+                    b4 = (D * Pow((1.0 + D * B * (HP - SP)), -(B + 1.0) / B)) * q;
+                }
+                
+                // MTF stretch (Histogram Transformation)
+                if ( G.m_flags.GHSMtf || G.m_flags.GHSMtfInv )
+                {
+                    double m = 1 / (2 * (D + 1));
+                    double zLPSP = (1 - 2 * m)*(LP - SP) - m;
+                    double qlp = (m - 1) * (LP - SP) / zLPSP;
+                    double q0 =  qlp + LP * (m - 1) * m / (zLPSP * zLPSP);
+                    double qwp = (m - 1) * (HP - SP) / ((2 * m - 1) * (HP - SP) - m);
+                    double zSPHP = (2 * m - 1)*(HP - SP) - m;
+                    double q1 =  qwp + (HP - 1) * (m - 1) * m / (zSPHP * zSPHP);
+                    double q = 1.0 / (q1 - q0);
+                    
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = m * (1 - m) * q / (zLPSP * zLPSP);
+                    
+                    // derive coefficients for LP <= x <= SP
+                    a2 = -q0 * q;
+                    b2 = (m-1) * q;
+                    c2 = b2 * (-SP);
+                    d2 = (1 - 2 * m);
+                    e2 = -d2 * SP - m;
+                    
+                    // derive coefficients for LP <= x <= SP
+                    a3 = -q0 * q;
+                    b3 = (m - 1) * q;
+                    c3 = b3 * (-SP);
+                    d3 = (2 * m - 1);
+                    e3 = -d3 * SP - m;
+                    
+                    // derive coefficients for x > HP
+                    a4 = (qwp - HP * (1 - m) * m / (zSPHP * zSPHP) - q0) * q;
+                    b4 = -m * (m - 1) * q / (zSPHP * zSPHP);
+                }
+                
+                // Arcsinh Stretch
+                if ( G.m_flags.GHSAsh || G.m_flags.GHSAshInv )
+                {
+                    double powSPLP = Sqrt(D * D * (SP - LP) * (SP - LP) + 1);
+                    double powHPSP = Sqrt(D * D * (HP - SP) * (HP - SP) + 1);
+                    double qlp = - Ln(D * (SP - LP) + powSPLP);
+                    double q0 = qlp - LP * D / powSPLP;
+                    double qwp = Ln(D * (HP - SP) + powHPSP);
+                    double q1 = qwp + (1.0 - HP) * D / powHPSP;
+                    double q = 1.0 / (q1 - q0);
+                    
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = D * q / powSPLP;
+                    
+                    // derive coefficients for LP <= x < SP
+                    a2 = -q0 * q;
+                    b2 = -q;
+                    c2 = -D;
+                    d2 = D * D;
+                    e2 = SP;
+                    
+                    // derive coefficients for SP <= x <= HP
+                    a3 = -q0 * q;
+                    b3 = q;
+                    c3 = D;
+                    d3 = D * D;
+                    e3 = SP;
+                    
+                    // derive coefficients for x > HP
+                    a4 = (qwp - HP * D / powHPSP - q0) * q;
+                    b4 = D * q / powHPSP;
+                }
+                
+                // Linear stretch (coefficients not needed)
+                if ( G.m_flags.Linear )
+                {
+                    // derive coefficients for x < LP
+                    a1 = 0.0;
+                    b1 = 0.0;
+                    
+                    // derive coefficients for LP <= x < SP
+                    a2 = 0.0;
+                    b2 = 0.0;
+                    c2 = 0.0;
+                    d2 = 0.0;
+                    e2 = SP;
+                    
+                    // derive coefficients for SP <= x <= HP
+                    a3 = 0.0;
+                    b3 = 0.0;
+                    c3 = 0.0;
+                    d3 = 0.0;
+                    e3 = 0.0;
+                    
+                    // derive coefficients for x > HP
+                    a4 = 0.0;
+                    b4 = 0.0;
+                }
         }
     };
     
@@ -578,7 +579,7 @@ private:
     
     pcl_enum    p_ST;
     pcl_enum    p_SC;
-    pcl_bool   p_Inv;
+    pcl_bool    p_Inv;
     double      p_D;
     double      p_b;
     double      p_SP;
@@ -777,10 +778,12 @@ private:
     
     bool IsInvertible() const
     {
-        bool saturation = (p_ST != GHSST::ST_Linear) && (p_SC == GHSSC::SC_Saturation);
-        bool colour = (p_ST != GHSST::ST_Linear) && (p_SC == GHSSC::SC_Colour);
-        bool linear = p_ST == GHSST::ST_Linear;
-        return !(saturation || colour || linear);
+        //bool lightness = (p_ST != GHSST::ST_Linear) && (p_SC == GHSSC::SC_Lightness);
+        //bool saturation = (p_ST != GHSST::ST_Linear) && (p_SC == GHSSC::SC_Saturation);
+        //bool colour = (p_ST != GHSST::ST_Linear) && (p_SC == GHSSC::SC_Colour);
+        //bool linear = p_ST == GHSST::ST_Linear;
+        //return !(lightness || saturation || colour || linear);
+        return (true);
     }
     
 // ----------------------------------------------------------------------------
