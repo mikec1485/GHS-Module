@@ -11,7 +11,7 @@
 // GHSInstance.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -191,7 +191,7 @@ public:
         if ( srcH.IsEmpty() )
           return;
         
-        UI64Vector histData(0, srcH.Resolution());
+        Histogram::histogram_type histData(0, srcH.Resolution());
         
         double last = 0.0;
         G.Transform( last );
@@ -201,11 +201,13 @@ public:
            double next = double( i + 1 )/srcH.Resolution();
            G.Transform( next );
            double span = next - last;
+           
            if (next == last)
            {
                double start = last * dstH.Resolution();
                int startInt = Floor(start);
-               histData[startInt] += srcH.Count(startInt);
+               if (startInt < srcH.Resolution())
+                   histData[startInt] += uint64(srcH.Count(i));
            }
            else
            {
@@ -215,12 +217,14 @@ public:
                double end = next * dstH.Resolution();
                int endInt = Ceil(end);
                
-               for (int i = startInt; i < endInt; i++)
-                   histData[i] += quota;
+               for (int i = startInt; i < Min(srcH.Resolution(), endInt); i++)
+                   histData[i] += uint64(quota);
                
-               histData[startInt] -= (start - double(startInt)) * quota;
-               histData[endInt - 1] -= (double(endInt) - end) * quota;
+               histData[startInt] -= uint64((start - double(startInt)) * quota);
+               if ( !(endInt > srcH.Resolution()) )
+                   histData[endInt - 1] -= uint64((double(endInt) - end) * quota);
            }
+           
            last = next;
        }
         

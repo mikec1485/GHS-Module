@@ -11,7 +11,7 @@
 // GHSInterface.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -1048,10 +1048,15 @@ void GHSInterface::UpdateTransformationControls()
         AdjustToContents();
     }
     
-    GUI->LinearFineAdjust_ComboBox.SetCurrentItem(m_linearFAParameter - 3);
+    GUI->LinearFineAdjust_ComboBox.SetCurrentItem(m_linearFAParameter - 5);
     GUI->FineAdjust_ComboBox.SetCurrentItem(m_nonlinFAParameter);
     GUI->LinearFineAdjust_CheckBox.SetChecked(m_useFinestAdjustment);
     GUI->FineAdjust_CheckBox.SetChecked(m_useFinestAdjustment);
+    
+    if ((m_nonlinFAParameter == D) || (m_nonlinFAParameter == b))
+        GUI->FineAdjust_CheckBox.Enable(false);
+    else
+        GUI->FineAdjust_CheckBox.Enable(true);
     
 }
 
@@ -2047,8 +2052,12 @@ GHSInterface::slider_id GHSInterface::FindHandler( double v ) const
 
 double GHSInterface::SliderToHistogram( int x ) const
 {
-   return double( x + GUI->InputHistogram_ScrollBox.HorizontalScrollPosition() ) /
-               (GUI->HistogramSliders_Control.Width()*m_inputZoomX - 1);
+    double d = (GUI->HistogramSliders_Control.Width()*m_inputZoomX - 1);
+    if (d > 0.0) {
+        return double( x + GUI->InputHistogram_ScrollBox.HorizontalScrollPosition() ) / d;
+    } else {
+        return double( 0.0 );
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -2196,6 +2205,8 @@ void GHSInterface::__AutoZero_ButtonClick( Button& sender, bool /*checked*/ )
     else
     {
         int r1 = m_sourceData[0].Resolution() - 1;
+        if (r1 == 0)
+            return;
         
         if ( sender == GUI->LCPReset_ToolButton )
         {
@@ -2232,6 +2243,8 @@ double GHSInterface::CalculateLowClipPoint( double clipRatio )
     if ( m_sourceData.IsEmpty() )
        if ( !GetSourceHistograms() )
           return 0.0;
+    
+    clipRatio = Range(clipRatio, 0.0, 1.0);
     
     ImageVariant image = m_currentView.Image();
     count_type N = image->NumberOfPixels();
@@ -2292,6 +2305,8 @@ double GHSInterface::CalculateHighClipPoint( double clipRatio )
     if ( m_sourceData.IsEmpty() )
        if ( !GetSourceHistograms() )
           return 0.0;
+    
+    clipRatio = Range(clipRatio, 0.0, 1.0);
     
     ImageVariant image = m_currentView.Image();
     count_type N = image->NumberOfPixels();
@@ -2532,7 +2547,7 @@ void GHSInterface::__ItemSelected( ComboBox& sender, int itemIndex )
     else if ( sender == GUI->FineAdjust_ComboBox )
         m_nonlinFAParameter = fa_parameter( itemIndex );
     else if ( sender == GUI->LinearFineAdjust_ComboBox )
-        m_linearFAParameter = fa_parameter( 3 + itemIndex );
+        m_linearFAParameter = fa_parameter( 5 + itemIndex );
     
     CalculateOutputHistograms();
     CalculateClippingCounts();
@@ -2562,6 +2577,8 @@ void GHSInterface::__SliderValueUpdated( Slider& sender, int value )
         int d = m_useFinestAdjustment ? 1000000 : 10000;
         switch (m_nonlinFAParameter)
         {
+            case D: m_instance.SetStretchFactor( m_FAPBeforeAdjustment + double( value - 500 )/1000 ); break;
+            case b: m_instance.SetLocalIntensity( m_FAPBeforeAdjustment + double( value - 500 )/1000 ); break;
             case SP: m_instance.SetSymmetryPoint( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
             case LP: m_instance.SetShadowProtect( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
             case HP: m_instance.SetHighlightProtect( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
@@ -2630,7 +2647,11 @@ void GHSInterface::__FineAdjustSliderGetFocus( Control& sender )
 {
     if ( sender == GUI->FineAdjust_Slider )
     {
-        if ( m_nonlinFAParameter == SP )
+        if ( m_nonlinFAParameter == D )
+            m_FAPBeforeAdjustment = m_instance.p_D;
+        else if ( m_nonlinFAParameter == b )
+            m_FAPBeforeAdjustment = m_instance.p_b;
+        else if ( m_nonlinFAParameter == SP )
             m_FAPBeforeAdjustment = m_instance.p_SP;
         else if ( m_nonlinFAParameter == LP )
             m_FAPBeforeAdjustment = m_instance.p_LP;
@@ -2710,7 +2731,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     LogHistogram_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/log_histogram.svg", ri16, ri16 ) );
     LogHistogram_ToolButton.SetScaledFixedSize( 20, 20 );
     LogHistogram_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    LogHistogram_ToolButton.SetToolTip( "Plot histogram on a log scale. Useful for seeing smaller histogram counts relatingto stars, for example." );
+    LogHistogram_ToolButton.SetToolTip( "Plot histogram on a log scale. Useful for seeing smaller histogram counts relating to stars, for example." );
     LogHistogram_ToolButton.SetCheckable();
     LogHistogram_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__LogHistogram_ButtonClick, w );
     
@@ -2890,7 +2911,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     //
     
     Inv_CheckBox.SetText( "Invert" );
-    Inv_CheckBox.SetToolTip( "<p>Check here to use the inverse form of the transformation equations. <b>Warning:</b> Some transformations can involve clipping and are not truly invertible (e.g. Linear strteches and Non-linear saturation or colour stretches. Inversion is disabled for these cases.</p>" );
+    Inv_CheckBox.SetToolTip( "<p>Check here to use the inverse form of the transformation equations. <b>Warning:</b> Some transformations can involve clipping and are not truly invertible (e.g. Linear stretches and Non-linear lightness, saturation or colour stretches.)</p>" );
     Inv_CheckBox.OnClick( (pcl::Button::click_event_handler)&GHSInterface::__ItemClicked, w );
 
     Inv_Sizer.AddUnscaledSpacing( labelWidth1 + w.LogicalPixelsToPhysical( 4 ) );
@@ -3024,6 +3045,8 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     FineAdjust_Label.SetMinWidth( labelWidth1 );
     FineAdjust_Label.SetTextAlignment( TextAlign::Right|TextAlign::VertCenter );
     
+    FineAdjust_ComboBox.AddItem( "D" );
+    FineAdjust_ComboBox.AddItem( "b" );
     FineAdjust_ComboBox.AddItem( "SP" );
     FineAdjust_ComboBox.AddItem( "LP" );
     FineAdjust_ComboBox.AddItem( "HP" );
@@ -3047,7 +3070,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     FineAdjust_Sizer.Add( FineAdjust_Slider );
     
     FineAdjust_CheckBox.SetText( "Use highest sensitivity" );
-    FineAdjust_CheckBox.SetToolTip( "<p>Check to adjust the 6th decimal place, leave unchecked to adjust the 4th decimal place.</p>" );
+    FineAdjust_CheckBox.SetToolTip( "<p>For SP, LP or HP, check to adjust the 6th decimal place, leave unchecked to adjust the 4th decimal place. For D and b this is disabled and fine adjustment is always at the 3rd decimal place.</p>" );
     FineAdjust_CheckBox.OnClick( (pcl::Button::click_event_handler)&GHSInterface::__ItemClicked, w );
 
     FALevel_Sizer.AddUnscaledSpacing( labelWidth1 + w.LogicalPixelsToPhysical( 4 ) );
@@ -3064,7 +3087,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     //
 
     GHSParameters_Sizer.SetSpacing(3);
-    GHSParameters_Sizer.Add( Inv_Sizer );
+    //GHSParameters_Sizer.Add( Inv_Sizer );
     GHSParameters_Sizer.Add( D_Sizer );
     GHSParameters_Sizer.Add( b_Sizer );
     GHSParameters_Sizer.AddSpacing(3);
@@ -3224,7 +3247,9 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     LinearParameters_Control.SetVisible(false);
 
     Parameters_Sizer.Add( ST_Sizer );
-    Parameters_Sizer.AddSpacing( 6 );
+    Parameters_Sizer.AddSpacing( 3 );
+    Parameters_Sizer.Add( Inv_Sizer );
+    Parameters_Sizer.AddSpacing( 3 );
     Parameters_Sizer.Add( GHSParameters_Control );
     Parameters_Sizer.Add( LinearParameters_Control );
     Parameters_Control.SetSizer( Parameters_Sizer );

@@ -11,7 +11,7 @@
 // GHSParameters.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).

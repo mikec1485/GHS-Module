@@ -11,7 +11,7 @@
 // GHSModule.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022, Mike Cranfield
+// Copyright (C) 2022,2023 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -32,14 +32,14 @@
 
 #define MODULE_VERSION_MAJOR     3
 #define MODULE_VERSION_MINOR     0
-#define MODULE_VERSION_REVISION  0
+#define MODULE_VERSION_REVISION  2
 #define MODULE_VERSION_BUILD     0
 #define MODULE_VERSION_LANGUAGE  eng
 #define MODULE_VERSION_STATUS    release
 
-#define MODULE_RELEASE_YEAR      2022
-#define MODULE_RELEASE_MONTH     11
-#define MODULE_RELEASE_DAY       02
+#define MODULE_RELEASE_YEAR      2023
+#define MODULE_RELEASE_MONTH     01
+#define MODULE_RELEASE_DAY       01
 
 #include "GHSModule.h"
 #include "GHSProcess.h"
@@ -101,7 +101,7 @@ String GHSModule::Author() const
 
 String GHSModule::Copyright() const
 {
-   return "Copyright (c) 2022 Mike Cranfield";
+   return "Copyright (c) 2022,2023 Mike Cranfield";
 }
 
 // ----------------------------------------------------------------------------
