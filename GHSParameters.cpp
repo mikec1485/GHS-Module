@@ -11,7 +11,7 @@
 // GHSParameters.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -76,6 +76,7 @@ IsoString GHSST::ElementId( size_type i ) const
         case ST_GeneralisedHyperbolic:  return "ST_GeneralisedHyperbolic";
         case ST_MidtonesTransfer:       return "ST_MidtonesTransfer";
         case ST_Arcsinh:                return "ST_Arcsinh";
+        case ST_PowerLaw:                  return "ST_PowerLaw";
         case ST_Linear:                 return "ST_Linear";
     }
 }

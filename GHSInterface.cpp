@@ -11,7 +11,7 @@
 // GHSInterface.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -81,7 +81,7 @@ GHSInterface::~GHSInterface()
 
 InterfaceFeatures GHSInterface::Features() const
 {
-   return InterfaceFeature::Default | InterfaceFeature::RealTimeButton;
+   return InterfaceFeature::Default | InterfaceFeature::RealTimeButton | InterfaceFeature::TrackViewButton | InterfaceFeature::RealTimeF32Images;
 }
 
 // ----------------------------------------------------------------------------
@@ -125,6 +125,31 @@ void GHSInterface::RealTimePreviewUpdated(bool active)
 
 // ----------------------------------------------------------------------------
 
+void GHSInterface::TrackViewUpdated(bool active)
+{
+    if (GUI != nullptr)
+        if (active)
+        {
+            ImageWindow theActiveWindow(ImageWindow::ActiveWindow());
+
+            if (theActiveWindow != ImageWindow::Null())
+            {
+                m_currentView = theActiveWindow.CurrentView();
+                SynchronizeWithCurrentView();
+            }
+        }
+        else
+        {
+            m_readoutSource = FromNone;
+            m_currentView = View::Null();
+            SynchronizeWithCurrentView();
+            EnsureLayoutUpdated();
+            AdjustToContents();
+        }           
+}
+
+// ----------------------------------------------------------------------------
+
 void GHSInterface::ResetInstance()
 {
     
@@ -134,6 +159,7 @@ void GHSInterface::ResetInstance()
     m_readoutSource = FromNone;
     m_linearFAParameter = BP;
     m_nonlinFAParameter = SP;
+    m_useFinestAdjustment   = true;
     m_channel = 3;
     
     CalculateOutputHistograms();
@@ -152,21 +178,19 @@ bool GHSInterface::Launch( const MetaProcess& P, const ProcessImplementation*, b
        GUI = new GUIData( *this );
        SetWindowTitle( "GeneralizedHyperbolicStretch" );
        
-       ImageWindow theActiveWindow( ImageWindow::ActiveWindow() );
-       
-       if ( theActiveWindow != ImageWindow::Null() )
-       {
-           m_currentView = theActiveWindow.CurrentView();
-           SynchronizeWithCurrentView();
-       }
-       
        ReadoutOptions roo = ReadoutOptions::GetCurrentOptions();
        m_readoutSize = roo.ProbeSize();
        m_readoutStatistic = roo.Mode();
+
+       //OnHide((Control::event_handler)&GHSInterface::__InterfaceHide, *this);
+       //OnShow((Control::event_handler)&GHSInterface::__InterfaceShow, *this);
        
-       UpdateControls();
+       //SynchronizeWithCurrentView();
+       //UpdateControls();
    }
 
+   ActivateTrackView();
+   UpdateControls();
    dynamic = false;
    return &P == TheGHSProcess;
 }
@@ -213,7 +237,7 @@ bool GHSInterface::ImportProcess( const ProcessImplementation& p )
 
 // ----------------------------------------------------------------------------
 
-bool GHSInterface::RequiresRealTimePreviewUpdate( const UInt16Image&, const View&, const Rect&, int ) const
+bool GHSInterface::RequiresRealTimePreviewUpdate( const Image&, const View&, const Rect&, int ) const
 {
    return true;
 }
@@ -228,7 +252,7 @@ GHSInterface::RealTimeThread::RealTimeThread()
 
 // ----------------------------------------------------------------------------
 
-void GHSInterface::RealTimeThread::Reset( const UInt16Image& image, const GHSInstance& instance )
+void GHSInterface::RealTimeThread::Reset( const Image& image, const GHSInstance& instance )
 {
     image.ResetSelections();
     m_image.Assign( image );
@@ -239,17 +263,12 @@ void GHSInterface::RealTimeThread::Reset( const UInt16Image& image, const GHSIns
 
 void GHSInterface::RealTimeThread::Run()
 {
-    //MuteStatus status;
-    //m_image.SetStatusCallback( &status );
-    //m_instance.UpdateFlags();   Not needed because Reset()  includes m_instance.Assign() which
-    //m_instance.UpdateCoeffs();  updates flags and coefficients
     m_instance.Preview( m_image );
-    //m_image.ResetSelections();
 }
 
 // ----------------------------------------------------------------------------
 
-bool GHSInterface::GenerateRealTimePreview( UInt16Image& image, const View& view, const Rect& rect, int z, String& info) const
+bool GHSInterface::GenerateRealTimePreview( Image& image, const View& view, const Rect& rect, int z, String& info) const
 {
     m_realTimeThread = new RealTimeThread();
 
@@ -314,9 +333,14 @@ bool GHSInterface::WantsImageNotifications() const
 
 void GHSInterface::ImageUpdated( const View& v )
 {
+   
    if ( GUI != nullptr )
-      if ( v == m_currentView )
+      //if (v == m_currentView && IsVisible())
+      if (v == m_currentView)
+      {
           SynchronizeWithCurrentView();
+      }
+    
 }
 
 // ----------------------------------------------------------------------------
@@ -325,7 +349,8 @@ void GHSInterface::ImageFocused( const View& v )
 {
    if ( GUI != nullptr )
    {
-       if (m_currentView != v )
+       //if ((m_currentView != v ) && IsTrackViewActive() && IsVisible())
+       if ((m_currentView != v) && IsTrackViewActive())
        {
            m_readoutSource = FromNone;
            m_currentView = v;
@@ -342,7 +367,7 @@ void GHSInterface::ImageDeleted( const View& v )
 {
    if ( GUI != nullptr )
    {
-       if (m_currentView == v )
+       if (m_currentView == v)
        {
            m_readoutSource = FromNone;
            m_currentView = View::Null();
@@ -353,11 +378,9 @@ void GHSInterface::ImageDeleted( const View& v )
     }
 }
 
-// ----------------------------------------------------------------------------
-
 bool GHSInterface::WantsViewPropertyNotifications() const
 {
-   return true;
+   return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -403,6 +426,7 @@ void GHSInterface::UpdateReadout( const View& v, const DPoint& p, double R, doub
     
     if (v != m_currentView)
         return;
+        
     
     if ( m_sourceData.IsEmpty() )
        if ( !GetSourceHistograms() )
@@ -460,7 +484,7 @@ void GHSInterface::UpdateReadout( const View& v, const DPoint& p, double R, doub
     img.Free();
      
     UpdateReadoutControls();
-    UpdateRealTimePreview();
+    //UpdateRealTimePreview();
     UpdateHistograms();
 }
 
@@ -499,7 +523,7 @@ void GHSInterface::ReadoutOptionsUpdated()
         m_readoutActive = true;
         UpdateReadout(m_currentView, m_readoutPoint, 0.0, 0.0, 0.0, 0.0);
         m_readoutActive = false;
-        UpdateReadoutControls();
+        //UpdateReadoutControls();
     }
 }
 
@@ -547,59 +571,81 @@ bool GHSInterface::GetSourceHistograms()
    m_sourceData.Clear();
    if ( m_currentView.IsNull() )
       return false;
-    
-    ImageVariant fromImage(m_currentView.Image());
-    
-    int N = 1;
-    if (fromImage.IsColor())
-        N = 3;
-    for (int i = 0; i < N; ++i)
+
+   ImageVariant fromImage;
+   fromImage.CopyImage(m_currentView.Image());
+   int N = fromImage.IsColor() ? 3 : 1;
+
+   for (int i = 0; i < N; ++i)
     {
         Histogram h( m_plotResolution );
         h.SelectChannel(i);
         h << fromImage;
-        m_sourceData.Add( h );
+        m_sourceData.Add( Histogram( h ) );
     }
        
-    if (fromImage.IsColor())
+    if (m_currentView.Image().IsColor())
     {
         // Lightness channel
-        fromImage.GetLightness(m_lightnessImage);
-        Histogram hLight( m_plotResolution );
-        hLight << m_lightnessImage;
+        if (m_instance.p_SC == GHSSC::SC_Lightness)
+        {
+            Histogram h(m_plotResolution);
+            m_lightnessImage.Free();
+            fromImage.GetLightness(m_lightnessImage);
+            h.SelectChannel(0);
+            h << m_lightnessImage;
+            m_sourceData.Add(Histogram(h));
+        }
+        else
+        {
+            Histogram h(m_plotResolution);
+            m_sourceData.Add(Histogram(h));
+        }
+
+        // Saturation channel
+        if (m_instance.p_SC == GHSSC::SC_Saturation)
+        {
+            Histogram h(m_plotResolution);
+            m_saturationImage.Free();
+            fromImage.SetColorSpace(ColorSpace::HSV);
+            h.SelectChannel(1);
+            h << fromImage;
+            fromImage.GetIntensity(m_saturationImage); // to create monochrome image with correct dimensions
+            m_saturationImage.AssignImage(fromImage, 0, 1, 1);
+            m_sourceData.Add(Histogram(h));
+        }
+        else
+        {
+            Histogram h(m_plotResolution);
+            m_sourceData.Add(Histogram(h));
+        }
     
         // Luma channel (Luminance with gamma = 1)
-        ImageVariant fromImageCopy;
-        fromImageCopy.CopyImage(fromImage);
-        RGBColorSystem rgbws = fromImage.RGBWorkingSpace();
-        FVector x = rgbws.ChromaticityXCoordinates();
-        FVector y = rgbws.ChromaticityYCoordinates();
-        FVector Y = rgbws.LuminanceCoefficients();
-        FVector newx(x[0], x[1], x[2]);
-        FVector newy(y[0], y[1], y[2]);
-        FVector newY(Y[0], Y[1], Y[2]);
-        RGBColorSystem newRgbws(1, false, newx, newy, newY);
-        fromImageCopy.SetRGBWorkingSpace( newRgbws );
-        fromImageCopy.GetLuminance(m_luminanceImage);
-        Histogram hLum( m_plotResolution );
-        hLum << m_luminanceImage;
-        
-        // Saturation channel
-        fromImageCopy.SetColorSpace(ColorSpace::HSV);
-        Histogram hSat( m_plotResolution );
-        hSat.SelectChannel(1);
-        hSat << fromImageCopy;
-        fromImageCopy.GetLuminance(m_saturationImage); // to create monochrome image with correct dimensions
-        m_saturationImage.AssignImage(fromImageCopy, 0, 1, 1);
-        
-        m_sourceData.Add(hLight);
-        m_sourceData.Add(hSat);
-        m_sourceData.Add(hLum);
-        
-        fromImageCopy.Free();
-        fromImage.Free();
+        if (m_instance.p_SC == GHSSC::SC_Colour)
+        {
+            Histogram h(m_plotResolution);
+            m_luminanceImage.Free();
+            RGBColorSystem rgbws = fromImage.RGBWorkingSpace();
+            FVector x = rgbws.ChromaticityXCoordinates();
+            FVector y = rgbws.ChromaticityYCoordinates();
+            FVector Y = rgbws.LuminanceCoefficients();
+            if (!m_instance.p_RGBWS)
+                Y[0] = Y[1] = Y[2] = 1.0 / 3.0;
+            RGBColorSystem newRgbws(1, false, x, y, Y);
+            fromImage.SetRGBWorkingSpace(newRgbws);
+            fromImage.GetLuminance(m_luminanceImage);
+            h.SelectChannel(0);
+            h << m_luminanceImage;
+            m_sourceData.Add(Histogram(h));
+        }
+        else
+        {
+            Histogram h(m_plotResolution);
+            m_sourceData.Add(Histogram(h));
+        }
     }
     
+    fromImage.Free();
     return true;
 }
 
@@ -607,19 +653,20 @@ bool GHSInterface::GetSourceHistograms()
 
 void GHSInterface::CalculateInputHistograms()
 {
-    m_sourceData.Clear();
+
+    m_sourceData.Clear();  //m_sourceData is cleared by GetSourceHistograms()
     m_inputData.Clear();
 
-    if ( !GetSourceHistograms() )
+    if (!GetSourceHistograms())
         return;
-    
+
     int chCount = m_currentView.IsColor() ? 6 : 1;
-    
-    for ( int c = 0; c < chCount; ++c )
+
+    for (int c = 0; c < chCount; ++c)
     {
-        Histogram h( m_plotResolution );
+        Histogram h(m_plotResolution);
         m_sourceData[c].Resample(h);
-        m_inputData.Add( h );
+        m_inputData.Add(h);
     }
 }
 
@@ -672,7 +719,6 @@ void GHSInterface::CalculateOutputHistograms()
         }
     }
     
-    
     if (m_instance.p_SC == GHSSC::SC_Lightness)
     {
         Histogram h( m_plotResolution );
@@ -682,7 +728,7 @@ void GHSInterface::CalculateOutputHistograms()
     else
     {
         Histogram h( m_plotResolution );
-        m_sourceData[3].Resample(h);
+        //m_sourceData[3].Resample(h);
         m_outputData.Add( h );
     }
     
@@ -695,7 +741,7 @@ void GHSInterface::CalculateOutputHistograms()
     else
     {
         Histogram h( m_plotResolution );
-        m_sourceData[4].Resample(h);
+        //m_sourceData[4].Resample(h);
         m_outputData.Add( h );
     }
     
@@ -708,7 +754,7 @@ void GHSInterface::CalculateOutputHistograms()
     else
     {
         Histogram h( m_plotResolution );
-        m_sourceData[5].Resample(h);
+        //m_sourceData[5].Resample(h);
         m_outputData.Add( h );
     }
 }
@@ -719,6 +765,9 @@ void GHSInterface::CalculateClippingCounts()
 {
     m_shadowsCount = 0;
     m_highlightsCount = 0;
+
+    if (m_instance.p_ST != GHSST::ST_Linear)
+        return;
 
     if ( m_sourceData.IsEmpty() )
         if ( !GetSourceHistograms() )
@@ -831,33 +880,52 @@ void GHSInterface::SetRejectSaturated( bool reject )
 
 // ----------------------------------------------------------------------------
 
-void GHSInterface::SetInputZoom( int hz, int vz, const Point* p )
+void GHSInterface::SetInputZoom( int hz, int vz, Point* p )
 {
     m_settingUp = true;
+    
+    int visibleWidth = GUI->InputHistogram_ScrollBox.Viewport().Width();
+    int visibleHeight = GUI->InputHistogram_ScrollBox.Viewport().Height();
+    int hsPosition = GUI->InputHistogram_ScrollBox.HorizontalScrollPosition();
+    int oldContentsWidth = visibleWidth * m_inputZoomX;
+    
+    DPoint zoomPoint(0.0, 0.0);
+    if ( p == nullptr )
+    {
+        if (m_readoutSource != FromNone)
+        {
+            double readoutHPos = oldContentsWidth * m_readoutValue;
+            if ( (readoutHPos >= hsPosition) && (readoutHPos <= hsPosition + visibleWidth) )
+                zoomPoint.x = readoutHPos;
+        }
+    }
+    else
+    {
+        zoomPoint = *p;
+    }
 
     m_inputZoomX = hz;
     m_inputZoomY = vz;
 
     bool hsb = m_inputZoomX > 1;
     bool vsb = m_inputZoomY > 1;
-
+        
     GUI->InputHistogram_ScrollBox.ShowScrollBars( hsb, vsb );
 
-    int visibleWidth = GUI->InputHistogram_ScrollBox.Viewport().Width();
-    int visibleHeight = GUI->InputHistogram_ScrollBox.Viewport().Height();
-
-    int sliderControlSize = RoundInt( LogicalPixelsToPhysical( m_sliderControlSize ) );
+    //int sliderControlSize = RoundInt( LogicalPixelsToPhysical( m_sliderControlSize ) );
     int contentsWidth = visibleWidth * m_inputZoomX;
-    int contentsHeight = (visibleHeight - sliderControlSize) * m_inputZoomY + sliderControlSize;
+    //int contentsHeight = (visibleHeight - sliderControlSize) * m_inputZoomY + sliderControlSize;
 
     if ( hsb )
     {
         int m = contentsWidth - visibleWidth;
         GUI->InputHistogram_ScrollBox.SetHorizontalScrollRange( 0, m );
+        
+        int newScrollPos = (hsPosition*contentsWidth)/oldContentsWidth;
+        if (zoomPoint.x > 0.0)
+            newScrollPos = (zoomPoint.x * contentsWidth)/oldContentsWidth - (visibleWidth >> 1);
 
-        if ( p != nullptr )
-            GUI->InputHistogram_ScrollBox.SetHorizontalScrollPosition(
-                  Range( p->x*m_inputZoomX - (visibleWidth >> 1), 0, m ) );
+        GUI->InputHistogram_ScrollBox.SetHorizontalScrollPosition(Range( newScrollPos, 0, m ) );
     }
     else
         GUI->InputHistogram_ScrollBox.SetHorizontalScrollRange( 0, 0 );
@@ -866,12 +934,16 @@ void GHSInterface::SetInputZoom( int hz, int vz, const Point* p )
 
     if ( vsb )
     {
+        /*
+        //This code is not used
+        
         int m = contentsHeight - visibleHeight;
         GUI->InputHistogram_ScrollBox.SetVerticalScrollRange( 0, m );
 
         if ( p != nullptr )
             GUI->InputHistogram_ScrollBox.SetVerticalScrollPosition(
-                  Range( p->y*m_inputZoomY - (visibleHeight >> 1), 0, m ) );
+                  Range( zoomPoint.y*m_inputZoomY - (visibleHeight >> 1), 0, m ) );
+         */
     }
     else
         GUI->InputHistogram_ScrollBox.SetVerticalScrollRange( 0, 0 );
@@ -901,12 +973,16 @@ void GHSInterface::UpdateGraphicsControls()
     GUI->ShowGrid_ToolButton.SetChecked( m_showGrid );
     GUI->LogHistogram_ToolButton.SetChecked( m_logGraph );
     GUI->PreStretchHist_ToolButton.SetChecked( m_showHist );
+    GUI->PostStretchHist_ToolButton.SetChecked(m_showStretchedHist);
 }
 
 // ----------------------------------------------------------------------------
 
 void GHSInterface::UpdateReadoutControls()
 {
+    if ( m_currentView.IsNull() )
+        m_readoutSource = FromNone;
+
     String readoutMode;
     switch (m_readoutStatistic)
     {
@@ -977,13 +1053,17 @@ void GHSInterface::UpdateReadoutControls()
     if (m_instance.p_ST == GHSST::ST_Linear)
     {
         GUI->ReadoutSend_PushButton.SetText("Send to BP");
-        GUI->ReadoutSend_PushButton.SetToolTip( "Use readout value to set the value of BP." );
+        GUI->ReadoutSend_PushButton.SetToolTip( "<p>Use readout value to set the value of BP.</p>" );
     }
     else
     {
         GUI->ReadoutSend_PushButton.SetText("Send to SP");
-        GUI->ReadoutSend_PushButton.SetToolTip( "Use readout value to set the value of SP." );
+        GUI->ReadoutSend_PushButton.SetToolTip( "<p>Use readout value to set the value of SP.</p>" );
     }
+
+    GUI->Readout_Label.Enable(IsTrackViewActive());
+    GUI->ReadoutSend_PushButton.Enable(IsTrackViewActive());
+    GUI->ReadoutClear_PushButton.Enable(IsTrackViewActive());
 }
 
 // ----------------------------------------------------------------------------
@@ -992,8 +1072,19 @@ void GHSInterface::UpdateTransformationControls()
 {
     GUI->ST_ComboBox.SetCurrentItem(m_instance.p_ST);
     GUI->SC_ComboBox.SetCurrentItem(m_instance.p_SC);
+
+    if (IsTrackViewActive() && (!m_currentView.Image().IsColor()) && (!m_currentView.IsNull()))
+    {
+        //GUI->SC_ComboBox.SetCurrentItem(GHSSC::SC_RGB);
+        GUI->SC_ComboBox.Enable(false);
+    }
+    else
+    {
+        //GUI->SC_ComboBox.SetCurrentItem(m_instance.p_SC);
+        GUI->SC_ComboBox.Enable(true);
+    }
     
-    if ((m_instance.p_SC == GHSSC::SC_Colour) && (m_instance.p_ST != GHSST::ST_Linear))
+    if ((m_instance.p_SC == GHSSC::SC_Colour) && !TrackingGreyscale())
         GUI->ColourOptions_GroupBox.Enable(true);
     else
         GUI->ColourOptions_GroupBox.Enable(false);
@@ -1064,6 +1155,9 @@ void GHSInterface::UpdateTransformationControls()
 
 void GHSInterface::UpdateClippingCountControls()
 {
+    if (m_instance.p_ST != GHSST::ST_Linear)
+        return;
+
    if ( m_currentView.IsNull() )
    {
        GUI->LCP_NumericControl.SetValue(0.0);
@@ -1229,30 +1323,46 @@ void GHSInterface::UpdateHistogramInfo()
         s.AppendFormat( "Cursor Position\n  x= %.4f \n  y= %.4f \nTransform(x)= %.4f \nLevel= (%d-%d) \nCurrent count= %llu | %.4f%%\nTransform count= %llu | %.4f%% ", m_histogramPos.x, m_histogramPos.y, tx, i, j-1, inCount, 100.0*inCount/inTotal, outCount, 100.0*outCount/outTotal );
     }
 
-    if ( s.IsEmpty() )
-        s.AppendFormat( "Cursor Position\n  x= %.4f \n  y= %.4f \nTransform(x)= %.4f" , m_histogramPos.x, m_histogramPos.y, tx );
+    if (s.IsEmpty())
+    {
+        s.AppendFormat("Cursor Position\n  x= %.4f \n  y= %.4f \nTransform(x)= %.4f", m_histogramPos.x, m_histogramPos.y, tx);
+        if (!IsTrackViewActive())
+            s.AppendFormat("\n\nActivate track view to see Histogram\ndata for current active image");
+    }
 
-    GUI->InputHistogramPlot_Control.SetToolTip( s );
+    GUI->InputHistogramPlot_Control.SetToolTip( "<p>" + s + "</p>");
 }
 
 // ----------------------------------------------------------------------------
 
 void GHSInterface::SynchronizeWithCurrentView()
 {
-    if ( !m_currentView.IsNull() )
+    if (GUI != nullptr)
     {
-        if ( m_currentView.IsColor() )
+        if (m_currentView.IsNull())
+        {
             GUI->ColourOptions_Control.Show();
+            GUI->Readout_Control.Hide();
+        }
+        else if (m_currentView.IsColor())
+        {
+            GUI->ColourOptions_Control.Show();
+            GUI->Readout_Control.Show();
+        }
         else
+        {
             GUI->ColourOptions_Control.Hide();
+            GUI->Readout_Control.Show();
+        }
     }
     
     CalculateInputHistograms();
     CalculateOutputHistograms();
-    CalculateClippingCounts();
-
     UpdateHistograms();
+    
+    CalculateClippingCounts();
     UpdateClippingCountControls();
+
     UpdateTransformationControls();
     UpdateReadoutControls();
 }
@@ -1312,28 +1422,29 @@ void GHSInterface::PlotMonoHistogramValues(
     
     g.SetPen( colour, DisplayPixelRatio() );
     
-    //double peakToUse = Max(peak, plotValues.MaxComponent());
     double peakToUse = peak;
-    
     if (m_logGraph)
         peakToUse = Ln(1.0 + peakToUse);
     peakToUse = Max(1.0, peakToUse);
+    double normFac = 1.0 / peakToUse;
+    double hMinus1 = height - 1.0;
+    
     
     Array<Point> points;
-    for (int i = 0; i < plotValues.Length(); ++i)
+    if (m_logGraph)
     {
-        int y;
-        if (m_logGraph)
+        for (int i = 0; i < plotValues.Length(); ++i)
         {
-            y = Max( -1, RoundInt( (height - 1)*(1 - Ln(1.0 + double( *plotValues.At(i) ) )/peakToUse) ) - r.y0 ); // -1 to allow clipping at top
+            points.Add(Point(i, Max(-1, RoundInt(hMinus1 * (1 - normFac*Ln(1.0 + double(*plotValues.At(i))))) - r.y0)));
         }
-        else
-        {
-            y = Max( -1, RoundInt( (height - 1)*(1 - double( *plotValues.At(i) )/peakToUse) ) - r.y0 ); // -1 to allow clipping at top
-        }
-        points.Add( Point( i, y ) );
     }
-    
+    else
+    {
+        for (int i = 0; i < plotValues.Length(); ++i)
+        {
+            points.Add(Point(i, Max(-1, RoundInt(hMinus1 * (1 - normFac*double(*plotValues.At(i)))) - r.y0)));
+        }
+    }
     
     switch ( graphStyle )
     {
@@ -1427,16 +1538,18 @@ DVector GHSInterface::GetHistogramPlotValues( Graphics& g, const Rect& r, const 
     int histRes = H.Resolution();
     if (histRes == 0)
         return plotValues;
-    double dx = double(hZoom * width)/double(histRes);
-    if (dx == 0)
-        return plotValues;
     
+    if (hZoom * width == 0)
+        return plotValues;
+
+    double dx = double(histRes) / (double(hZoom) * double(width));
+
     for (int x = r.x0; x < r.x1; ++x)
     {
-        double z0 = double(x) / dx;
+        double z0 = dx * double(x);
         int i0 = int(Floor( z0 ));
         
-        double z1 = double(x + 1) / dx;
+        double z1 = dx * double(x + 1);
         int i1 = int(Floor( z1 ));
         
         for (int j = i0; j < i1; ++j)
@@ -1445,6 +1558,7 @@ DVector GHSInterface::GetHistogramPlotValues( Graphics& g, const Rect& r, const 
         *plotValues.At(x - r.x0) -= double(H[i0]) * (z0 - i0);
         *plotValues.At(x - r.x0) += double(H[i1]) * (z1 - i1);
     }
+    
     
     int histPeakLevel = 0;
     int x0 = 0;
@@ -1455,19 +1569,19 @@ DVector GHSInterface::GetHistogramPlotValues( Graphics& g, const Rect& r, const 
     {
         peak = *MaxItem(plotValues.Begin()+1, plotValues.End()-1);
         
-        int margin = int(Ceil(1.0/dx));
+        int margin = int(Ceil(dx));
         UI64Vector trimmedHistData(H.HistogramData().Begin() + margin, histRes - (2 * margin));
         histPeakLevel = trimmedHistData.IndexOfLargestComponent();
-        int xm = int(Floor( histPeakLevel * dx ));
+        int xm = int(Floor( histPeakLevel / dx ));
         x0 = Max(1, xm - 10);
         x1 = Min(xm + 10, hZoom * width - 2);
-        
+
         for (int x = x0; x < x1; ++x)
         {
-            double z0 = double(x) / dx;
+            double z0 = dx * double(x);
             int i0 = int(Floor( z0 ));
             
-            double z1 = double(x + 1) / dx;
+            double z1 = dx * double(x + 1);
             int i1 = int(Floor( z1 ));
             
             for (int j = i0; j < i1; ++j)
@@ -1482,16 +1596,16 @@ DVector GHSInterface::GetHistogramPlotValues( Graphics& g, const Rect& r, const 
         peak = plotValues.MaxComponent();
         
         histPeakLevel = H.PeakLevel();
-        int xm = int(Floor( histPeakLevel * dx ));
+        int xm = int(Floor( histPeakLevel / dx ));
         x0 = Max(0, xm - 10);
         x1 = Min(xm + 10, hZoom * width - 1);
         
         for (int x = x0; x < x1; ++x)
         {
-            double z0 = double(x) / dx;
+            double z0 = dx * double(x);
             int i0 = int(Floor( z0 ));
             
-            double z1 = double(x + 1) / dx;
+            double z1 = dx * double(x + 1);
             int i1 = int(Floor( z1 ));
             
             for (int j = i0; j < i1; ++j)
@@ -1501,21 +1615,28 @@ DVector GHSInterface::GetHistogramPlotValues( Graphics& g, const Rect& r, const 
             *maxAreaValues.At(x - x0) += double(H[i1]) * (z1 - i1);
         }
     }
-    
+
     peak = Max(peak, maxAreaValues.MaxComponent());
     return plotValues;
 }
 
 // ----------------------------------------------------------------------------
 
+bool GHSInterface::TrackingGreyscale()
+{
+    return IsTrackViewActive() &&
+        (!m_currentView.Image().IsColor()) &&
+        (!m_currentView.IsNull());
+}
+
 void GHSInterface::PlotScale( Graphics& g, const Rect& r, int width )
 {
    int w = r.Width();
    int h = r.Height();
 
-   bool c0 = m_channel == 0 || m_channel >= 3;
-   bool c1 = m_channel == 1 || m_channel >= 3;
-   bool c2 = m_channel == 2 || m_channel >= 3;
+   bool c0 = m_channel == 0 || m_channel >= 3 || TrackingGreyscale();
+   bool c1 = m_channel == 1 || m_channel >= 3 || TrackingGreyscale();
+   bool c2 = m_channel == 2 || m_channel >= 3 || TrackingGreyscale();
     
     if (!(w > 1))
         return;
@@ -1544,7 +1665,8 @@ RGBA GHSInterface::HandlerColor( double v ) const
 
 void GHSInterface::PlotHandler( Graphics& g, double v, int x0, int width )
 {
-   int h = RoundInt( LogicalPixelsToPhysical( m_sliderControlSize ) );
+   //int h = RoundInt( LogicalPixelsToPhysical( m_sliderControlSize ) );
+    int h = int( std::lround( LogicalPixelsToPhysical( m_sliderControlSize ) ) );
    int h2 = (h >> 1) + 1;
 
    int x = RoundInt( v*(width - 1) ) - x0;
@@ -1708,7 +1830,7 @@ void GHSInterface::RegenerateInputViewport()
         if ( (int ( inH.Length() ) != 1) || (int ( outH.Length() ) != 1) )
             return;
     }
-     
+    
 
    if ( !inH.IsEmpty() && !outH.IsEmpty() )
    {
@@ -1724,8 +1846,12 @@ void GHSInterface::RegenerateInputViewport()
           if ( !image.IsColor() )
           {
               double peak = 0.0;
-              DVector valuesToPlot = GetHistogramPlotValues(g, r, outH[0], w0, m_inputZoomX, peak);
-              PlotMonoHistogramValues(g, r, valuesToPlot, peak, w, h, m_inputZoomX, m_outputGraphStyle, RGBAColor(0x80, 0x80, 0x80));
+              DVector valuesToPlot;
+              if (m_showStretchedHist)
+              {
+                  valuesToPlot = GetHistogramPlotValues(g, r, outH[0], w0, m_inputZoomX, peak);
+                  PlotMonoHistogramValues(g, r, valuesToPlot, peak, w, h, m_inputZoomX, m_outputGraphStyle, RGBAColor(0x80, 0x80, 0x80));
+              }
               
               if (m_showHist)
               {
@@ -1740,15 +1866,21 @@ void GHSInterface::RegenerateInputViewport()
                   int frontColour = -1;
                   if (m_instance.p_SC < GHSSC::SC_RGB)
                       frontColour = m_instance.p_SC;
+
+                  double peak, maxPeak;
+                  DVector redValuesToPlot, greenValuesToPlot, blueValuesToPlot;
                   
-                  double peak = 0.0;
-                  DVector redValuesToPlot = GetHistogramPlotValues(g, r, outH[0], w0, m_inputZoomX, peak);
-                  double maxPeak = peak;
-                  DVector greenValuesToPlot = GetHistogramPlotValues(g, r, outH[1], w0, m_inputZoomX, peak);
-                  maxPeak = Max(maxPeak, peak);
-                  DVector blueValuesToPlot = GetHistogramPlotValues(g, r, outH[2], w0, m_inputZoomX, peak);
-                  maxPeak = Max(maxPeak, peak);
-                  PlotColourHistogramValues(g, r, redValuesToPlot, greenValuesToPlot, blueValuesToPlot, maxPeak, w, h, m_inputZoomX, m_outputGraphStyle, frontColour);
+                  if (m_showStretchedHist)
+                  {
+                      peak = 0.0;
+                      redValuesToPlot = GetHistogramPlotValues(g, r, outH[0], w0, m_inputZoomX, peak);
+                      maxPeak = peak;
+                      greenValuesToPlot = GetHistogramPlotValues(g, r, outH[1], w0, m_inputZoomX, peak);
+                      maxPeak = Max(maxPeak, peak);
+                      blueValuesToPlot = GetHistogramPlotValues(g, r, outH[2], w0, m_inputZoomX, peak);
+                      maxPeak = Max(maxPeak, peak);
+                      PlotColourHistogramValues(g, r, redValuesToPlot, greenValuesToPlot, blueValuesToPlot, maxPeak, w, h, m_inputZoomX, m_outputGraphStyle, frontColour);
+                  }
                   
                   if (m_showHist)
                   {
@@ -1767,9 +1899,14 @@ void GHSInterface::RegenerateInputViewport()
                   int channel = int(m_instance.p_SC) - 1;
                   
                   double peak = 0.0;
-                  DVector valuesToPlot = GetHistogramPlotValues(g, r, outH[channel], w0, m_inputZoomX, peak);
-                  PlotMonoHistogramValues(g, r, valuesToPlot, peak, w, h, m_inputZoomX, m_outputGraphStyle, RGBAColor(0x80, 0x80, 0x80));
-                  
+                  DVector valuesToPlot;
+
+                  if (m_showStretchedHist)
+                  {
+                      valuesToPlot = GetHistogramPlotValues(g, r, outH[channel], w0, m_inputZoomX, peak);
+                      PlotMonoHistogramValues(g, r, valuesToPlot, peak, w, h, m_inputZoomX, m_outputGraphStyle, RGBAColor(0x80, 0x80, 0x80));
+                  }
+                 
                   if (m_showHist)
                   {
                       valuesToPlot = GetHistogramPlotValues(g, r, inH[channel], w0, m_inputZoomX, peak);
@@ -2165,79 +2302,6 @@ void GHSInterface::__Reset_ButtonClick( Button& sender, bool /*checked*/ )
 
 // ----------------------------------------------------------------------------
 
-void GHSInterface::__AutoZero_ButtonClick( Button& sender, bool /*checked*/ )
-{
-    
-   if ( m_sourceData.IsEmpty() )
-      if ( !GetSourceHistograms() )
-         return;
-
-   ImageVariant image = m_currentView.Image();
-    
-    if (!image.IsColor() || (m_instance.p_SC != GHSSC::SC_RGB))
-    {
-        int cc = 0;
-        if (image.IsColor() && (m_instance.p_SC < GHSSC::SC_RGB))
-            cc = m_instance.p_SC;
-                
-        int r1 = m_sourceData[cc].Resolution() - 1;
-        if (r1 == 0)
-            return;
-        
-        if ( sender == GUI->LCPReset_ToolButton )
-        {
-            int c0;
-            for ( c0 = 0; c0 < r1; ++c0 )
-                if ( m_sourceData[cc].Count( c0 ) != 0 )
-                    break;
-            m_instance.SetBlackpoint(double(c0)/r1);
-        }
-        
-        else if ( sender == GUI->HCPReset_ToolButton )
-        {
-            int c1;
-            for ( c1 = 0; c1 < r1; ++c1 )
-                if ( m_sourceData[cc].Count( c1 ) != 0 )
-                    break;
-            m_instance.SetWhitepoint(double(c1)/r1);
-        }
-    }
-    else
-    {
-        int r1 = m_sourceData[0].Resolution() - 1;
-        if (r1 == 0)
-            return;
-        
-        if ( sender == GUI->LCPReset_ToolButton )
-        {
-            int c0;
-            for ( c0 = 0; c0 < r1; ++c0 )
-                if (( m_sourceData[0].Count( c0 ) != 0 ) || ( m_sourceData[1].Count( c0 ) != 0 ) || ( m_sourceData[2].Count( c0 ) != 0 ))
-                    break;
-            m_instance.SetBlackpoint(double(c0)/r1);
-        }
-        
-        else if ( sender == GUI->HCPReset_ToolButton )
-        {
-            int c1;
-            for ( c1 = 0; c1 < r1; ++c1 )
-                if (( m_sourceData[0].Count( c1 ) != 0 ) || ( m_sourceData[1].Count( c1 ) != 0 ) || ( m_sourceData[2].Count( c1 ) != 0 ))
-                    break;
-            m_instance.SetWhitepoint(double(c1)/r1);
-        }
-    }
-
-    CalculateOutputHistograms();
-    CalculateClippingCounts();
-
-    UpdateTransformationControls();
-    UpdateHistograms();
-    UpdateClippingCountControls();
-    UpdateRealTimePreview();
-}
-
-// ----------------------------------------------------------------------------
-
 double GHSInterface::CalculateLowClipPoint( double clipRatio )
 {
     if ( m_sourceData.IsEmpty() )
@@ -2361,6 +2425,20 @@ void GHSInterface::SetWhitepointFromHCP( double clipRatio )
 
 // ----------------------------------------------------------------------------
 
+void GHSInterface::__InterfaceHide(Control& sender)
+{
+    //Code to run on interface hide
+}
+
+// ----------------------------------------------------------------------------
+
+void GHSInterface::__InterfaceShow(Control& sender)
+{
+    //Code to run on interface show
+}
+
+// ----------------------------------------------------------------------------
+
 void GHSInterface::__Zoom_ButtonClick( Button& sender, bool /*checked*/ )
 {
     if ( sender == GUI->Zoom11_ToolButton )
@@ -2369,11 +2447,11 @@ void GHSInterface::__Zoom_ButtonClick( Button& sender, bool /*checked*/ )
     }
     if ( sender == GUI->ZoomIn_ToolButton )
     {
-        SetInputZoom( Range(250*(1 + Floor(m_inputZoomX/250)), 1, 999), 1 );
+        SetInputZoom( Range(250*(1 + Floor(m_inputZoomX/250)), 1, 999), m_inputZoomY );
     }
     if ( sender == GUI->ZoomOut_ToolButton )
     {
-        SetInputZoom( Range(250*Floor(m_inputZoomX/251), 1, 999), 1 );
+        SetInputZoom( Range(250*Floor(m_inputZoomX/251), 1, 999), m_inputZoomY );
     }
 }
 
@@ -2407,11 +2485,24 @@ void GHSInterface::__Zoom_ValueUpdated( SpinBox& sender, int value )
    {
        if (m_inputZoomX > 0)
        {
+           /*
            int visibleWidth = GUI->InputHistogram_ScrollBox.Viewport().Width();
            int hsPosition = GUI->InputHistogram_ScrollBox.HorizontalScrollPosition();
            Point p( (hsPosition + (visibleWidth>>1))/m_inputZoomX, 0);
            
-           SetInputZoom( value, m_inputZoomY, &p );
+           if (m_readoutSource != FromNone)
+           {
+               int contentsWidth = visibleWidth * m_inputZoomX;
+               int readoutHPos = RoundInt( contentsWidth*m_readoutValue );
+               if ( (readoutHPos > hsPosition) && (readoutHPos < hsPosition + visibleWidth) )
+               {
+                   p.x = readoutHPos/m_inputZoomX;
+               }
+           }
+           */
+           
+           //SetInputZoom( value, m_inputZoomY, &p );
+           SetInputZoom( value, m_inputZoomY );
        }
        else
        {
@@ -2456,6 +2547,14 @@ void GHSInterface::__LogHistogram_ButtonClick( Button& /*sender*/, bool checked 
 void GHSInterface::__PreStretchHist_ButtonClick( Button& /*sender*/, bool checked )
 {
     m_showHist = checked;
+    UpdateHistograms();
+}
+
+// ----------------------------------------------------------------------------
+
+void GHSInterface::__PostStretchHist_ButtonClick(Button& /*sender*/, bool checked)
+{
+    m_showStretchedHist = checked;
     UpdateHistograms();
 }
 
@@ -2508,17 +2607,37 @@ void GHSInterface::__RealValueUpdated( NumericEdit& sender, double value )
 
 void GHSInterface::__ItemClicked( Button& sender, bool checked )
 {
-    if ( sender == GUI->Inv_CheckBox )
+    if (sender == GUI->Inv_CheckBox)
+    {
         m_instance.p_Inv = checked;
-    else if ( sender == GUI->RGBWS_CheckBox )
+        CalculateOutputHistograms();
+        CalculateClippingCounts();
+    }      
+    else if (sender == GUI->RGBWS_CheckBox)
+    {
         m_instance.p_RGBWS = checked;
+        if (m_currentView.Image().IsColor() && (m_instance.p_SC == GHSSC::SC_Colour))
+        {
+            CalculateInputHistograms();
+            CalculateOutputHistograms();
+            UpdateHistograms();
+            CalculateClippingCounts();
+
+            if (m_readoutSource == FromPreview)
+            {
+                m_readoutActive = true;
+                UpdateReadout(m_currentView, m_readoutPoint, 0.0, 0.0, 0.0, 0.0);
+                m_readoutActive = false;
+            }
+        }
+        
+    }
     else if ( sender == GUI->FineAdjust_CheckBox )
         m_useFinestAdjustment = checked;
     else if ( sender == GUI->LinearFineAdjust_CheckBox )
         m_useFinestAdjustment = checked;
     
-    CalculateOutputHistograms();
-    CalculateClippingCounts();
+    
     UpdateControls();
     UpdateRealTimePreview();
 }
@@ -2577,11 +2696,11 @@ void GHSInterface::__SliderValueUpdated( Slider& sender, int value )
         int d = m_useFinestAdjustment ? 1000000 : 10000;
         switch (m_nonlinFAParameter)
         {
-            case D: m_instance.SetStretchFactor( m_FAPBeforeAdjustment + double( value - 500 )/1000 ); break;
-            case b: m_instance.SetLocalIntensity( m_FAPBeforeAdjustment + double( value - 500 )/1000 ); break;
-            case SP: m_instance.SetSymmetryPoint( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
-            case LP: m_instance.SetShadowProtect( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
-            case HP: m_instance.SetHighlightProtect( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
+            case D: m_instance.SetStretchFactor( m_FAPBeforeAdjustment + (double(value) - 500.0 )/1000 ); break;
+            case b: m_instance.SetLocalIntensity( m_FAPBeforeAdjustment + (double(value) - 500.0) /1000 ); break;
+            case SP: m_instance.SetSymmetryPoint( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
+            case LP: m_instance.SetShadowProtect( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
+            case HP: m_instance.SetHighlightProtect( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
             default:;
         }
     }
@@ -2590,10 +2709,10 @@ void GHSInterface::__SliderValueUpdated( Slider& sender, int value )
         int d = m_useFinestAdjustment ? 1000000 : 10000;
         switch (m_linearFAParameter)
         {
-            case BP: m_instance.SetBlackpoint( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
-            case LCP: SetBlackpointFromLCP( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
-            case WP: m_instance.SetWhitepoint( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
-            case HCP: SetWhitepointFromHCP( m_FAPBeforeAdjustment + double( value - 500 )/d ); break;
+            case BP: m_instance.SetBlackpoint( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
+            case LCP: SetBlackpointFromLCP( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
+            case WP: m_instance.SetWhitepoint( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
+            case HCP: SetWhitepointFromHCP( m_FAPBeforeAdjustment + (double(value) - 500.0) /d ); break;
             default:;
         }
     }
@@ -2676,7 +2795,7 @@ void GHSInterface::__FineAdjustSliderGetFocus( Control& sender )
 GHSInterface::GUIData::GUIData( GHSInterface& w )
 {
     pcl::Font font = w.Font();
-    int labelWidth1 = font.Width( String( "Protect highlights (HP):  " ) ); // the longest label text
+    int labelWidth1 = font.Width( String( "Stretch factor (ln(D+1)):  " ) ); // the longest label text
     int editWidth1 = font.Width( String( '0', 10 ) );
     int ri16 = w.LogicalPixelsToResource( 16 );
     
@@ -2684,25 +2803,25 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     // Histogram controls
 
     HorizontalZoom_SpinBox.SetRange( 1, s_maxZoom );
-    HorizontalZoom_SpinBox.SetToolTip( "Histogram horizontal zoom" );
+    HorizontalZoom_SpinBox.SetToolTip( "<p>Histogram horizontal zoom<br>The zoom will be left justified unless a readout value is active and visible in the histogram display (yellow line), in which case the zoom will be centred on the readout value.</p>" );
     HorizontalZoom_SpinBox.OnValueUpdated( (SpinBox::value_event_handler)&GHSInterface::__Zoom_ValueUpdated, w );
 
     ZoomIn_ToolButton.SetIcon( w.ScaledResource( ":/toolbar/view-zoom-in.png" ) );
     ZoomIn_ToolButton.SetScaledFixedSize( 20, 20 );
     ZoomIn_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    ZoomIn_ToolButton.SetToolTip( "Big zoom in" );
+    ZoomIn_ToolButton.SetToolTip( "<p>Big zoom in<br>The zoom will be left justified unless a readout value is active and visible in the histogram display (yellow line), in which case the zoom will be centred on the readout value.</p>" );
     ZoomIn_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Zoom_ButtonClick, w );
     
     ZoomOut_ToolButton.SetIcon( w.ScaledResource( ":/toolbar/view-zoom-out.png" ) );
     ZoomOut_ToolButton.SetScaledFixedSize( 20, 20 );
     ZoomOut_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    ZoomOut_ToolButton.SetToolTip( "Big zoom out" );
+    ZoomOut_ToolButton.SetToolTip( "<p>Big zoom out<br>The zoom will be left justified unless a readout value is active and visible in the histogram display (yellow line), in which case the zoom will be centred on the readout value.</p>" );
     ZoomOut_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Zoom_ButtonClick, w );
     
     Zoom11_ToolButton.SetIcon( w.ScaledResource( ":/toolbar/view-zoom-1-1.png" ) );
     Zoom11_ToolButton.SetScaledFixedSize( 20, 20 );
     Zoom11_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    Zoom11_ToolButton.SetToolTip( "Zoom 1:1" );
+    Zoom11_ToolButton.SetToolTip( "<p>Reset Zoom</p>" );
     Zoom11_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Zoom_ButtonClick, w );
     
     //
@@ -2710,44 +2829,51 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     RejectSaturated_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/reject_saturated.svg", ri16, ri16 ) );
     RejectSaturated_ToolButton.SetScaledFixedSize( 20, 20 );
     RejectSaturated_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    RejectSaturated_ToolButton.SetToolTip( "Reject saturated pixels for histogram representations" );
+    RejectSaturated_ToolButton.SetToolTip( "<p>Reject saturated pixels for histogram representations</p>" );
     RejectSaturated_ToolButton.SetCheckable();
     RejectSaturated_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__RejectSaturated_ButtonClick, w );
 
     ShowCurve_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/show_curve.svg", ri16, ri16 ) );
     ShowCurve_ToolButton.SetScaledFixedSize( 20, 20 );
     ShowCurve_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    ShowCurve_ToolButton.SetToolTip( "Show GHS curve" );
+    ShowCurve_ToolButton.SetToolTip( "<p>Show pixel transformation curve</p>" );
     ShowCurve_ToolButton.SetCheckable();
     ShowCurve_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__ShowCurve_ButtonClick, w );
 
     ShowGrid_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/show_grid.svg", ri16, ri16 ) );
     ShowGrid_ToolButton.SetScaledFixedSize( 20, 20 );
     ShowGrid_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    ShowGrid_ToolButton.SetToolTip( "Show grids" );
+    ShowGrid_ToolButton.SetToolTip( "<p>Show grids</p>" );
     ShowGrid_ToolButton.SetCheckable();
     ShowGrid_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__ShowGrid_ButtonClick, w );
     
     LogHistogram_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/log_histogram.svg", ri16, ri16 ) );
     LogHistogram_ToolButton.SetScaledFixedSize( 20, 20 );
     LogHistogram_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    LogHistogram_ToolButton.SetToolTip( "Plot histogram on a log scale. Useful for seeing smaller histogram counts relating to stars, for example." );
+    LogHistogram_ToolButton.SetToolTip( "<p>Plot histogram on a log scale. Useful for seeing smaller histogram counts relating to stars, for example.</p>" );
     LogHistogram_ToolButton.SetCheckable();
     LogHistogram_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__LogHistogram_ButtonClick, w );
     
-    PreStretchHist_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/show_hist.svg", ri16, ri16 ) );
+    PreStretchHist_ToolButton.SetIcon( Bitmap::FromSVGFile( "@module_icons_dir/show_hist2.svg", ri16, ri16 ) );
     PreStretchHist_ToolButton.SetScaledFixedSize( 20, 20 );
     PreStretchHist_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    PreStretchHist_ToolButton.SetToolTip( "Show pre-stretch histogram." );
+    PreStretchHist_ToolButton.SetToolTip( "<p>Show pre-stretch histogram.</p>" );
     PreStretchHist_ToolButton.SetCheckable();
     PreStretchHist_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__PreStretchHist_ButtonClick, w );
 
+    PostStretchHist_ToolButton.SetIcon(Bitmap::FromSVGFile("@module_icons_dir/show_hist.svg", ri16, ri16));
+    PostStretchHist_ToolButton.SetScaledFixedSize(20, 20);
+    PostStretchHist_ToolButton.SetFocusStyle(FocusStyle::NoFocus);
+    PostStretchHist_ToolButton.SetToolTip("<p>Show post-stretch histogram.</p>");
+    PostStretchHist_ToolButton.SetCheckable();
+    PostStretchHist_ToolButton.OnClick((ToolButton::click_event_handler)&GHSInterface::__PostStretchHist_ButtonClick, w);
     Graphics_Sizer.SetSpacing( 4 );
     Graphics_Sizer.Add( RejectSaturated_ToolButton );
     Graphics_Sizer.Add( LogHistogram_ToolButton );
     Graphics_Sizer.Add( ShowCurve_ToolButton );
     Graphics_Sizer.Add( ShowGrid_ToolButton );
     Graphics_Sizer.Add( PreStretchHist_ToolButton );
+    Graphics_Sizer.Add( PostStretchHist_ToolButton );
     Graphics_Sizer.AddStretch();
     Graphics_Sizer.Add( HorizontalZoom_SpinBox );
     Graphics_Sizer.Add( ZoomIn_ToolButton );
@@ -2808,7 +2934,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     SC_ComboBox.AddItem( "Saturation" );
     SC_ComboBox.AddItem( "Colour" );
     
-    SC_ComboBox.SetToolTip( "<p>This parameter specifies how the transformation is to be applied. It can be applied to each of the R, G and B channels individually or all three.  It can also be applied to the CIE Lightness channel or the Saturation.  The final Colour option will stretch all three RGB channels by the same factor calculated by reference to the weighted average of the RGB values.  This reflects the approach used in the standard arcsinh process.</p>" );
+    SC_ComboBox.SetToolTip( "<p>This parameter specifies how the transformation is to be applied to colour images. <br><b>Colour Images</b><br>The transformation can be applied to one of the R, G or B channels alone, or to all three.  It can also be applied to the CIE Lightness channel or the Saturation.  The final Colour option will stretch all three RGB channels by the same factor calculated by reference to the weighted average of the RGB values.  This reflects the approach used in the standard arcsinh process.<br><b>Greyscale Images</b><br>This parameter, along with all the other colour option parameters, is ignored when the process is applied to a greyscale image.</p>" );
     SC_ComboBox.OnItemSelected( (ComboBox::item_event_handler)&GHSInterface::__ItemSelected, w );
     
     SC_Sizer.SetSpacing( 4 );
@@ -2827,7 +2953,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     CT_ComboBox.AddItem( "RGBBlend" );
     CT_ComboBox.AddItem( "RescaleGlobal" );
     
-    CT_ComboBox.SetToolTip( "<p>This parameter specifies what to do when undertaking a colour stretch if any channels relating to a specific pixel stretch to a value greater than 1.  Clip: will simply clip all channels greater than 1 for that pixel back to 1. Rescale: will scale all three channels for that pixel down by the ratio 1/max(R,G,B).  RGBBlend will blend in sufficient of an RGB stretch into that pixel to ensure all channels are not greater than 1.</p>" );
+    CT_ComboBox.SetToolTip( "<p>This parameter specifies what to do when undertaking a colour stretch if any channels relating to a specific pixel stretch to a value greater than 1.  Clip: will simply clip all channels greater than 1 for that pixel back to 1. Rescale: will scale all three channels for that pixel down by the ratio 1/max(R,G,B).  RGBBlend will blend in sufficient of an RGB stretch into that pixel to ensure all channels are not greater than 1. RescaleGlobal will find the maximum transformed R, G or B value across all pixels in the image, maxValue say, then all sample values across the entire image will be rescaled by 1/maxValue.</p>" );
     CT_ComboBox.OnItemSelected( (ComboBox::item_event_handler)&GHSInterface::__ItemSelected, w );
     
     CT_Sizer.SetSpacing( 4 );
@@ -2853,7 +2979,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     CBReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     CBReset_ToolButton.SetScaledFixedSize( 20, 20 );
     CBReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    CBReset_ToolButton.SetToolTip( "Reset CB parameter" );
+    CBReset_ToolButton.SetToolTip( "<p>Reset colour blend parameter</p>" );
     CBReset_ToolButton.SetCheckable(false);
     CBReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -2899,8 +3025,9 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     ST_ComboBox.AddItem( "Generalised Hyperbolic" );
     ST_ComboBox.AddItem( "Midtone Transfer" );
     ST_ComboBox.AddItem( "Arcsinh" );
+    ST_ComboBox.AddItem("Power Law");
     ST_ComboBox.AddItem( "Linear" );
-    ST_ComboBox.SetToolTip( "<p>Specifies the transformation equations to use. In most cases this will be the Generalised Hyperbolic Stretch equations designed for this module. Other options include the midtone transfer function used in the Histogram Transformation process, and the arcsinh function.  To both these the module brings additional functionality. Alternatively a linear stretch can be selected.</p>" );
+    ST_ComboBox.SetToolTip( "<p>Specifies the transformation equations to use. In most cases this will be the Generalised Hyperbolic Stretch equations designed for this module. Other options include the midtone transfer function used in the Histogram Transformation process, and the arcsinh and power law functions.  To each of these the module brings additional functionality. Alternatively a linear stretch can be selected.</p>" );
     ST_ComboBox.OnItemSelected( (ComboBox::item_event_handler)&GHSInterface::__ItemSelected, w );
     
     ST_Sizer.SetSpacing( 4 );
@@ -2911,7 +3038,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     //
     
     Inv_CheckBox.SetText( "Invert" );
-    Inv_CheckBox.SetToolTip( "<p>Check here to use the inverse form of the transformation equations. <b>Warning:</b> Some transformations can involve clipping and are not truly invertible (e.g. Linear stretches and Non-linear lightness, saturation or colour stretches.)</p>" );
+    Inv_CheckBox.SetToolTip( "<p>Check here to use the inverse form of the transformation equations. <b>Warning:</b> Some transformations can involve clipping and are not truly invertible. See the documentation for more detail.</p>" );
     Inv_CheckBox.OnClick( (pcl::Button::click_event_handler)&GHSInterface::__ItemClicked, w );
 
     Inv_Sizer.AddUnscaledSpacing( labelWidth1 + w.LogicalPixelsToPhysical( 4 ) );
@@ -2934,7 +3061,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     DReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     DReset_ToolButton.SetScaledFixedSize( 20, 20 );
     DReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    DReset_ToolButton.SetToolTip( "Reset D parameter" );
+    DReset_ToolButton.SetToolTip( "<p>Reset D parameter</p>" );
     DReset_ToolButton.SetCheckable(false);
     DReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -2958,7 +3085,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     bReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     bReset_ToolButton.SetScaledFixedSize( 20, 20 );
     bReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    bReset_ToolButton.SetToolTip( "Reset b parameter" );
+    bReset_ToolButton.SetToolTip( "<p>Reset b parameter</p>" );
     bReset_ToolButton.SetCheckable(false);
     bReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -2982,7 +3109,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     SPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     SPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     SPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    SPReset_ToolButton.SetToolTip( "Reset SP parameter" );
+    SPReset_ToolButton.SetToolTip( "<p>Reset SP parameter.</p>" );
     SPReset_ToolButton.SetCheckable(false);
     SPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3006,7 +3133,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     LPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     LPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     LPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    LPReset_ToolButton.SetToolTip( "Reset LP parameter" );
+    LPReset_ToolButton.SetToolTip( "<p>Reset LP parameter.</p>" );
     LPReset_ToolButton.SetCheckable(false);
     LPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3031,7 +3158,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     HPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     HPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     HPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    HPReset_ToolButton.SetToolTip( "Reset HP parameter" );
+    HPReset_ToolButton.SetToolTip( "<p>Reset HP parameter.</p>" );
     HPReset_ToolButton.SetCheckable(false);
     HPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3115,7 +3242,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     BPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     BPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     BPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    BPReset_ToolButton.SetToolTip( "Reset Blackpoint parameter" );
+    BPReset_ToolButton.SetToolTip( "<p>Reset Blackpoint parameter.</p>" );
     BPReset_ToolButton.SetCheckable(false);
     BPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3139,7 +3266,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     LCPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     LCPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     LCPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    LCPReset_ToolButton.SetToolTip( "Set Blackpoint parameter to greatest value that results in no clipping" );
+    LCPReset_ToolButton.SetToolTip( "<p>Set Blackpoint parameter to greatest value that results in no clipping.</p>" );
     LCPReset_ToolButton.SetCheckable(false);
     LCPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3161,7 +3288,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     WPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     WPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     WPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    WPReset_ToolButton.SetToolTip( "Reset Whitepoint parameter" );
+    WPReset_ToolButton.SetToolTip( "<p>Reset Whitepoint parameter.</p>" );
     WPReset_ToolButton.SetCheckable(false);
     WPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3176,14 +3303,14 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     HCP_NumericControl.SetReal();
     HCP_NumericControl.SetRange( 0.0, 1.0 );
     HCP_NumericControl.SetPrecision( TheGHSWPParameter->Precision() );
-    HCP_NumericControl.SetToolTip( "<p>Sets the upper clipping level for linear stretch of the image. Updating this parameter will automatically update the Whitepoint parameter in such a way that HCP is the maximum fraction of pixels clipped in any channel and set to 1.0 in the linear stretch. Note that any pixel with value greater than the white-point input will be clipped and the data lost. Contrast gained by performing the linear stretch will be evenly distributed over the image, which will be brightened.  Pixels with values greater than the Whitepoint will appear white and have a value of 1.0.</p>" );
+    HCP_NumericControl.SetToolTip( "<p>Sets the upper clipping level for linear stretch of the image. Updating this parameter will automatically update the Whitepoint parameter in such a way that HCP is the maximum fraction of pixels clipped in any channel and set to 1.0 in the linear stretch. Note that any pixel with value greater than the Whitepoint input will be clipped and the data lost. Contrast gained by performing the linear stretch will be evenly distributed over the image, which will be brightened.  Pixels with values greater than the Whitepoint will appear white and have a value of 1.0.</p>" );
     HCP_NumericControl.edit.SetFixedWidth( editWidth1 );
     HCP_NumericControl.OnValueUpdated( (NumericEdit::value_event_handler)&GHSInterface::__RealValueUpdated, w );
 
     HCPReset_ToolButton.SetIcon( w.ScaledResource( ":/icons/clear.png" ) );
     HCPReset_ToolButton.SetScaledFixedSize( 20, 20 );
     HCPReset_ToolButton.SetFocusStyle( FocusStyle::NoFocus );
-    HCPReset_ToolButton.SetToolTip( "Set Whitepoint parameter to lowest value that results in no clipping" );
+    HCPReset_ToolButton.SetToolTip( "<p>Set Whitepoint parameter to lowest value that results in no clipping.</p>" );
     HCPReset_ToolButton.SetCheckable(false);
     HCPReset_ToolButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Reset_ButtonClick, w );
     
@@ -3243,7 +3370,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     LinearParameters_Sizer.Add( LinearFineAdjust_GroupBox );
     LinearParameters_Control.SetSizer( LinearParameters_Sizer );
     
-    GHSParameters_Control.SetVisible(true);
+    //GHSParameters_Control.SetVisible(true);
     LinearParameters_Control.SetVisible(false);
 
     Parameters_Sizer.Add( ST_Sizer );
@@ -3301,7 +3428,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     
     ReadoutSend_PushButton.SetText( "Send to SP" );
     ReadoutSend_PushButton.SetFocusStyle( FocusStyle::NoFocus );
-    ReadoutSend_PushButton.SetToolTip( "Use readout value to set the value of SP." );
+    ReadoutSend_PushButton.SetToolTip( "<p>Use readout value to set the value of SP.</p>" );
     ReadoutSend_PushButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Readout_ButtonClick, w );
     
     ReadoutDesc_Sizer.SetSpacing( 4 );
@@ -3323,7 +3450,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     
     ReadoutClear_PushButton.SetText( "Clear" );
     ReadoutClear_PushButton.SetFocusStyle( FocusStyle::NoFocus );
-    ReadoutClear_PushButton.SetToolTip( "Clear readout." );
+    ReadoutClear_PushButton.SetToolTip( "<p>Clear readout.</p>" );
     ReadoutClear_PushButton.OnClick( (ToolButton::click_event_handler)&GHSInterface::__Readout_ButtonClick, w );
     
     ReadoutArea_Sizer.SetSpacing( 4 );
@@ -3357,7 +3484,7 @@ GHSInterface::GUIData::GUIData( GHSInterface& w )
     // ------------------------------------------------------------------
     // Global layout
     
-    ColourOptions_Control.SetVisible( false );
+    //ColourOptions_Control.SetVisible( false );
     
     //
     

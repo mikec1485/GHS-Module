@@ -11,7 +11,7 @@
 // GHSInterface.h
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -83,7 +83,7 @@ public:
     bool WantsRealTimePreviewNotifications() const override;
     void RealTimePreviewOwnerChanged(ProcessInterface& iface) override;
     void RealTimePreviewUpdated(bool active) override;
-    
+    void TrackViewUpdated(bool active) override;
    void ApplyInstance() const override;
    void ResetInstance() override;
    bool Launch( const MetaProcess&, const ProcessImplementation*, bool& dynamic, unsigned& /*flags*/ ) override;
@@ -92,8 +92,8 @@ public:
    bool RequiresInstanceValidation() const override;
    bool ImportProcess( const ProcessImplementation& ) override;
     
-    bool RequiresRealTimePreviewUpdate(const UInt16Image&, const View&, const Rect&, int zoomLevel) const override;
-    bool GenerateRealTimePreview(UInt16Image&, const View&, const Rect&, int zoomLevel, String& info) const override;
+    bool RequiresRealTimePreviewUpdate(const Image&, const View&, const Rect&, int zoomLevel) const override;
+    bool GenerateRealTimePreview(Image&, const View&, const Rect&, int zoomLevel, String& info) const override;
     
     bool WantsImageNotifications() const override;
     void ImageUpdated( const View& v ) override;
@@ -134,11 +134,11 @@ private:
     {
     public:
 
-        UInt16Image m_image;
+        Image m_image;
 
         RealTimeThread();
 
-        void Reset( const UInt16Image&, const GHSInstance& );
+        void Reset( const Image&, const GHSInstance& );
 
         void Run() override;
 
@@ -165,6 +165,7 @@ private:
             ToolButton          ZoomIn_ToolButton;
             ToolButton          ZoomOut_ToolButton;
             ToolButton          PreStretchHist_ToolButton;
+            ToolButton          PostStretchHist_ToolButton;
             //ToolButton          WebView_ToolButton;
 
 
@@ -315,6 +316,7 @@ private:
     graph_style    m_outputGraphStyle       = AreaStyle;
     bool           m_logGraph               = false;
     bool           m_showHist               = true;
+    bool           m_showStretchedHist      = true;
 
     // Histogram clippings.
     int m_shadowsCount                      = 0;
@@ -388,8 +390,6 @@ private:
     fa_parameter    m_nonlinFAParameter     = SP;
     
     
-    
-    
 
     /*
      * Main calculation routines
@@ -409,7 +409,7 @@ private:
     void SetHighlightProtect( double );
     void SetSymmetryPoint( double );
     void SetRejectSaturated( bool );
-    void SetInputZoom( int, int, const Point* = nullptr );
+    void SetInputZoom( int, int, Point* = nullptr );
     void SetBlackpointFromLCP( double );
     void SetWhitepointFromHCP( double );
 
@@ -455,10 +455,13 @@ private:
     RGBA HandlerColor( double ) const;
     slider_id FindHandler( double ) const;
     double SliderToHistogram( int ) const;
+    bool TrackingGreyscale();
 
     /*
     * Event handlers
     */
+    void __InterfaceHide(Control& sender);
+    void __InterfaceShow(Control& sender);
     void __RealValueUpdated( NumericEdit& sender, double value );
     void __ItemClicked( Button& sender, bool checked );
     void __ItemSelected( ComboBox& sender, int itemIndex );
@@ -491,6 +494,7 @@ private:
     void __ShowGrid_ButtonClick( Button&, bool );
     void __LogHistogram_ButtonClick( Button&, bool );
     void __PreStretchHist_ButtonClick( Button&, bool );
+    void __PostStretchHist_ButtonClick(Button&, bool);
     void __UpdateRealTimePreview_Timer( Timer& );
 
     friend struct GUIData;

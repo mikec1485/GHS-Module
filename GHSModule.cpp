@@ -11,7 +11,7 @@
 // GHSModule.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -31,15 +31,15 @@
 // ----------------------------------------------------------------------------
 
 #define MODULE_VERSION_MAJOR     3
-#define MODULE_VERSION_MINOR     0
-#define MODULE_VERSION_REVISION  2
+#define MODULE_VERSION_MINOR     2
+#define MODULE_VERSION_REVISION  0
 #define MODULE_VERSION_BUILD     0
 #define MODULE_VERSION_LANGUAGE  eng
 #define MODULE_VERSION_STATUS    release
 
-#define MODULE_RELEASE_YEAR      2023
-#define MODULE_RELEASE_MONTH     01
-#define MODULE_RELEASE_DAY       01
+#define MODULE_RELEASE_YEAR      2026
+#define MODULE_RELEASE_MONTH     10
+#define MODULE_RELEASE_DAY       30
 
 #include "GHSModule.h"
 #include "GHSProcess.h"
@@ -101,7 +101,7 @@ String GHSModule::Author() const
 
 String GHSModule::Copyright() const
 {
-   return "Copyright (c) 2022,2023 Mike Cranfield";
+   return "Copyright (c) 2022 - 2026 Mike Cranfield";
 }
 
 // ----------------------------------------------------------------------------
@@ -154,7 +154,7 @@ void GHSModule::GetReleaseDate( int& year, int& month, int& day ) const
  * The mode argument specifies the kind of installation being performed by the
  * core application. See the pcl::InstallMode namespace for more information.
  */
-PCL_MODULE_EXPORT int InstallPixInsightModule( int mode )
+PCL_MODULE_EXPORT int InstallPixInsightModule( int mode )                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
 {
    /*
     * When the PixInsight application installs this module, we just have to

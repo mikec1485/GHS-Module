@@ -11,7 +11,7 @@
 // GHSParameters.h
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -51,6 +51,7 @@ public:
    enum { ST_GeneralisedHyperbolic,
           ST_MidtonesTransfer,
           ST_Arcsinh,
+          ST_PowerLaw,
           ST_Linear,
           ST_NumberOfItems,
           Default = ST_GeneralisedHyperbolic };

@@ -11,7 +11,7 @@
 // GHSInstance.h
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -60,7 +60,7 @@ public:
     bool ExecuteOn( View& ) override;
     bool ExecuteOn( ImageVariant&, const IsoString& ) override;
     void* LockParameter( const MetaParameter*, size_type tableRow ) override;
-    void Preview( UInt16Image& );
+    void Preview( Image& );
     void TransformHistogram( Histogram& , const Histogram& );
 
 private:
@@ -205,6 +205,30 @@ private:
                         else if  (value < HPT)  {double expVal = Exp((m_coeffs.a3 - value) / m_coeffs.b3); value = m_coeffs.e3 - (expVal - (1 / expVal)) / (2 * m_coeffs.c3);}
                         else                    {value = (value - m_coeffs.a4) / m_coeffs.b4;}
                     }
+
+                    if (m_flags.GHSGam)
+                    {
+                        double LPT = p_LP;
+                        double SPT = p_SP;
+                        double HPT = p_HP;
+
+                        if (value < LPT) { value = m_coeffs.a1 + m_coeffs.b1 * value; }
+                        else if (value < SPT) { value = m_coeffs.a2 + m_coeffs.b2 * Pow((m_coeffs.c2 + m_coeffs.d2 * value), m_coeffs.e2); }
+                        else if (value < HPT) { value = m_coeffs.a3 + m_coeffs.b3 * Pow((m_coeffs.c3 + m_coeffs.d3 * value), m_coeffs.e3); }
+                        else { value = m_coeffs.a4 + m_coeffs.b4 * value; }
+                    }
+
+                    if (m_flags.GHSGamInv)
+                    {
+                        double LPT = m_coeffs.a1 + m_coeffs.b1 * p_LP;
+                        double SPT = m_coeffs.a2 + m_coeffs.b2 * Pow((m_coeffs.c2 + m_coeffs.d2 * p_SP), m_coeffs.e2);
+                        double HPT = m_coeffs.a4 + m_coeffs.b4 * p_HP;
+
+                        if (value < LPT) { value = (value - m_coeffs.a1) / m_coeffs.b1; }
+                        else if (value < SPT) { value = (Pow(((value - m_coeffs.a2) / m_coeffs.b2), (1.0 / m_coeffs.e2)) - m_coeffs.c2) / m_coeffs.d2; }
+                        else if (value < HPT) { value = (Pow(((value - m_coeffs.a3) / m_coeffs.b3), (1.0 / m_coeffs.e3)) - m_coeffs.c3) / m_coeffs.d3; }
+                        else { value = (value - m_coeffs.a4) / m_coeffs.b4; }
+                    }
                 }
             }
             value = Range(value, 0.0, 1.0);
@@ -224,12 +248,14 @@ private:
         bool GHSInt = false;
         bool GHSMtf = false;
         bool GHSAsh = false;
+        bool GHSGam = false;
         bool GHSLogInv = false;
         bool GHSExpInv = false;
         bool GHSHypInv = false;
         bool GHSIntInv = false;
         bool GHSMtfInv = false;
         bool GHSAshInv = false;
+        bool GHSGamInv = false;
 
        /*!
         * Default constructor.
@@ -258,6 +284,7 @@ private:
            GHSHyp = (GHSType) && (G.p_b > 0);
            GHSMtf = (G.p_ST == GHSST::ST_MidtonesTransfer) && (!Inverse);
            GHSAsh = (G.p_ST == GHSST::ST_Arcsinh) && (!Inverse);
+           GHSGam = (G.p_ST == GHSST::ST_PowerLaw) && (!Inverse);
            
            GHSTypeInv = (G.p_ST == GHSST::ST_GeneralisedHyperbolic) && (Inverse);
            GHSLogInv = (GHSTypeInv) && (G.p_b == -1);
@@ -266,6 +293,7 @@ private:
            GHSHypInv = (GHSTypeInv) && (G.p_b > 0);
            GHSMtfInv = (G.p_ST == GHSST::ST_MidtonesTransfer) && (Inverse);
            GHSAshInv = (G.p_ST == GHSST::ST_Arcsinh) && (Inverse);
+           GHSGamInv = (G.p_ST == GHSST::ST_PowerLaw) && (Inverse);
        }
     };
 
@@ -526,6 +554,39 @@ private:
                     a4 = (qwp - HP * D / powHPSP - q0) * q;
                     b4 = D * q / powHPSP;
                 }
+
+                // Gamma Stretch
+                if (G.m_flags.GHSGam || G.m_flags.GHSGamInv)
+                {
+                    double powSPLP = Pow(1.0 - (SP - LP), D);
+                    double powHPSP = Pow(1.0 - (HP - SP), D);
+                    double q0 = powSPLP * (1.0 - D * LP - SP) - 1.0;
+                    double qwp = 1.0 - powHPSP * (1.0 - (HP - SP));
+                    double q1 = qwp + (1.0 + D) * powHPSP * (1.0 - HP);
+                    double q = 1.0 / (q1 - q0);
+
+                    // derive coefficients for x < LP
+                    a1 = 0;
+                    b1 = (1 + D) * q * powSPLP;
+
+                    // derive coefficients for LP <= x < SP
+                    a2 = -(1.0 + q0) * q;
+                    b2 = q;
+                    c2 = 1.0 - SP;
+                    d2 = 1.0;
+                    e2 = 1.0 + D;
+
+                    // derive coefficients for SP <= x <= HP
+                    a3 = (1.0 - q0) * q;
+                    b3 = -q;
+                    c3 = 1.0 + SP;
+                    d3 = -1.0;
+                    e3 = 1.0 + D;
+
+                    // derive coefficients for x > HP
+                    a4 = (qwp - HP * (1.0 + D) * powHPSP - q0) * q;
+                    b4 = (1.0 + D) * powHPSP * q;
+                }
                 
                 // Linear stretch (coefficients not needed)
                 if ( G.m_flags.Linear )
@@ -772,8 +833,8 @@ private:
 
     bool IsIdentityTransformation() const
     {
-       return ((p_ST < 3) && (p_D == 0.0)) ||
-        ((p_ST == 3) && (p_BP == 0.0) && (p_WP == 1.0));
+       return ((p_ST < 4) && (p_D == 0.0)) ||
+        ((p_ST == 4) && (p_BP == 0.0) && (p_WP == 1.0));
     }
     
     bool IsInvertible() const

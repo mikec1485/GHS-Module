@@ -11,7 +11,7 @@
 // GHSInstance.cpp
 // ----------------------------------------------------------------------------
 //
-// Copyright (C) 2022,2023 Mike Cranfield
+// Copyright (C) 2022,2023,2024 Mike Cranfield
 //
 // This product is based on software from the PixInsight project, developed
 // by Pleiades Astrophoto and its contributors (https://pixinsight.com/).
@@ -198,7 +198,7 @@ public:
 
        for ( int i = 0; i < srcH.Resolution(); ++i )
        {
-           double next = double( i + 1 )/srcH.Resolution();
+           double next = (double(i) + 1.0 )/srcH.Resolution();
            G.Transform( next );
            double span = next - last;
            
@@ -806,7 +806,7 @@ void GHSInstance::TransformHistogram( Histogram& dstH, const Histogram& srcH )
 
 // ----------------------------------------------------------------------------
 
-void GHSInstance::Preview( UInt16Image& image )
+void GHSInstance::Preview( Image& image )
 {
    try
    {
